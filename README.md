@@ -1,5 +1,5 @@
 # MillClientController
-I was recently given permission by NASA to upload the mill programs I have been working on
+I was recently given permission by NASA to upload the mill programs I have been working on.
 
 This is the controller client that allows someone to remotely control and live-stream video from a mill (Sherline 4-Axis in this case, but it should work with any mill controllable through linuxcnc).
 
