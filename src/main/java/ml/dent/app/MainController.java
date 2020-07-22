@@ -4,7 +4,6 @@ import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.Future;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
-import javafx.beans.binding.Bindings;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Pos;
@@ -61,7 +60,7 @@ public class MainController {
 
     @FXML private MenuItem closeConnection;
 
-    @FXML private VBox millControlContainer;
+    @FXML private VBox millControlsContainer;
 
     @FXML private Slider speedControl;
     @FXML private Label  speedDisplay;
@@ -72,7 +71,7 @@ public class MainController {
 
     @FXML
     public void initialize() {
-        closeConnection.disableProperty().bind(Bindings.not(networkClient.connectionActiveProperty()));
+        closeConnection.disableProperty().bind(networkClient.connectionActiveProperty().not());
         networkClient.connectionActiveProperty().addListener(listener -> {
             if (!networkClient.isConnectionActive() && networkClient.isUnexpectedClose()) {
                 handleDisconnect(networkClient);
@@ -84,16 +83,9 @@ public class MainController {
             }
         });
         speedControl.valueProperty().addListener((obs, oldVal, newVal) -> {
-//            if (oldVal.intValue() == newVal.intValue())
-//                return;
             speedControl.setValue(newVal.intValue());
             if (newVal.intValue() == newVal.doubleValue()) {
-                boolean isReady = checkNetworkConnection(networkClient);
-                if (isReady) {
-                    networkClient.setSpeed(newVal.intValue());
-                } else {
-                    speedControl.setValue(oldVal.intValue());
-                }
+                networkClient.setSpeed(newVal.intValue());
             }
         });
         speedDisplay.textProperty().bind(speedControl.valueProperty().asString());
@@ -101,6 +93,8 @@ public class MainController {
         bindVideoTo(imageContainer);
         imageContainer.prefWidthProperty().bind(displayPanel.widthProperty());
         imageContainer.prefHeightProperty().bind(displayPanel.heightProperty());
+
+        millControlsContainer.disableProperty().bind(networkClient.connectionActiveProperty().not());
     }
 
     @FXML
@@ -155,10 +149,6 @@ public class MainController {
 
     @FXML
     protected void stopMill() {
-        boolean isReady = checkNetworkConnection(networkClient);
-        if (!isReady) {
-            return;
-        }
         networkClient.stopMill();
     }
 
@@ -320,10 +310,6 @@ public class MainController {
      * @param direction either 1 or -1 indicating the direction to move the mill
      */
     private void jogMill(String axis, int direction) {
-        boolean isReady = checkNetworkConnection(networkClient);
-        if (!isReady) {
-            return;
-        }
         if (!axis.equals(currentAxis)) {
             currentAxis = axis;
             networkClient.setAxis(axis);
@@ -332,30 +318,10 @@ public class MainController {
     }
 
     /**
-     * setSpeed will only accept whole numbers. Non whole number input will be silently ignored.
+     * setSpeed will round given speeds to the nearest whole number
      */
     private void setSpeed(double value) {
-        boolean isReady = checkNetworkConnection(networkClient);
-        if (isReady && value == Math.round(value)) {
-            networkClient.setSpeed((int) Math.round(value));
-        }
-    }
-
-    /**
-     * Will display error if the network client is not connected
-     *
-     * @return Whether the given network client is connected
-     */
-    private boolean checkNetworkConnection(SimpleNetworkClient client) {
-        if (client.isConnectionActive()) {
-            return true;
-        }
-        if (client == networkClient) {
-            UIUtil.showError("Error", "Cannot complete operation without first connecting to server. Please go to Connect>Connect to connect.", "Please connect first", window);
-        } else if (client == videoClient) {
-            UIUtil.showError("Error", "Cannot complete operation without first connecting to server. Please go to Video>Start Video to connect.", "Please connect first", window);
-        }
-        return false;
+        networkClient.setSpeed((int) Math.round(value));
     }
 
     private void bindVideoTo(Pane pane) {

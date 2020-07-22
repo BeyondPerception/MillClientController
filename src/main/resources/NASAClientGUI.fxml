@@ -41,7 +41,7 @@
                     <children>
                         <VBox alignment="CENTER" layoutY="83.0" prefHeight="549.0" prefWidth="186.0" spacing="50.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="10.0" AnchorPane.rightAnchor="10.0" AnchorPane.topAnchor="0.0">
                             <children>
-                        <VBox spacing="40.0">
+                        <VBox fx:id="millControlsContainer" spacing="40.0">
                            <children>
                                       <VBox alignment="CENTER" spacing="10.0">
                                           <children>
