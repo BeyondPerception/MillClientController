@@ -11,6 +11,7 @@ import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import ml.dent.app.StatusHandler;
 import ml.dent.net.SimpleNetworkClient;
 import org.freedesktop.gstreamer.Buffer;
 import org.freedesktop.gstreamer.Bus;
@@ -26,6 +27,8 @@ public class VideoClient extends SimpleNetworkClient {
 
     private LinkedBlockingQueue<Byte> incomingBytes;
 
+    private StatusHandler logger = StatusHandler.getInstance();
+
     public VideoClient(String host, int port) {
         super(host, port, '1');
         incomingBytes = new LinkedBlockingQueue<Byte>();
@@ -40,9 +43,7 @@ public class VideoClient extends SimpleNetworkClient {
     public ChannelFuture connect(ChannelHandler... channelHandlers) {
         ChannelHandler[] newHandlers = new ChannelHandler[channelHandlers.length + 1];
         newHandlers[0] = new VideoReceiver();
-        for (int i = 1; i < newHandlers.length; i++) {
-            newHandlers[i] = channelHandlers[i - 1];
-        }
+        System.arraycopy(channelHandlers, 0, newHandlers, 1, newHandlers.length - 1);
 
         return super.connect(newHandlers);
     }
