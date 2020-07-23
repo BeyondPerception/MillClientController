@@ -8,6 +8,7 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.concurrent.Future;
 import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 
 import javax.net.ssl.*;
@@ -183,8 +184,8 @@ public abstract class AbstractNetworkClient {
     /**
      * @return A BooleanProperty object that wraps the connection status of the channel
      */
-    public BooleanProperty connectionActiveProperty() {
-        return connectionStatusProperty;
+    public ReadOnlyBooleanProperty connectionActiveProperty() {
+        return BooleanProperty.readOnlyBooleanProperty(connectionStatusProperty);
     }
 
     /**

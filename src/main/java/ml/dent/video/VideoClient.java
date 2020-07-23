@@ -5,7 +5,10 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.ReadOnlyObjectProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import ml.dent.net.SimpleNetworkClient;
@@ -45,6 +48,12 @@ public class VideoClient extends SimpleNetworkClient {
     }
 
     private Pipeline pipeline;
+
+    private BooleanProperty playingProperty = new SimpleBooleanProperty(false);
+
+    public ReadOnlyBooleanProperty playingProperty() {
+        return BooleanProperty.readOnlyBooleanProperty(playingProperty);
+    }
 
     public boolean isPlaying() {
         return pipeline.isPlaying();

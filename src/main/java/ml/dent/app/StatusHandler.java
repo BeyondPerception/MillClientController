@@ -87,14 +87,15 @@ public class StatusHandler {
      * Will display the value of completion text at the moment isDone is invalidated.
      * If the initial value of completion text is not changed, the initial value will be displayed.
      */
-    public void offerOperation(String text, StringProperty completionText, BooleanProperty isDone) {
+    public void offerOperation(String text, StringProperty completionText, ReadOnlyBooleanProperty isDone) {
         offerOperation(text, completionText, isDone, new SimpleBooleanProperty());
     }
 
     /**
      * Will display additional alert if onError is set to true the moment isDone is invalidated.
      */
-    public void offerOperation(String text, StringProperty completionText, BooleanProperty isDone, BooleanProperty onError) {
+    public void offerOperation(String text, StringProperty completionText, ReadOnlyBooleanProperty isDone, ReadOnlyBooleanProperty onError) {
+        offerStatus(text);
         processes.add(new StatusJob(text, completionText, System.currentTimeMillis(), isDone, onError));
     }
 
@@ -132,7 +133,7 @@ public class StatusHandler {
         private String name;
         private long   timeStarted;
 
-        public StatusJob(String name, StringProperty completionText, long timeStarted, BooleanProperty isDone, BooleanProperty onError) {
+        public StatusJob(String name, StringProperty completionText, long timeStarted, ReadOnlyBooleanProperty isDone, ReadOnlyBooleanProperty onError) {
             this.name = name;
             this.timeStarted = timeStarted;
 
