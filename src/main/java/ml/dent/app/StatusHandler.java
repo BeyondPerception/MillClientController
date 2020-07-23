@@ -40,7 +40,7 @@ public class StatusHandler {
 
     private static StatusHandler instance;
 
-    public StatusHandler(Label leftStatus, Label rightStatus) {
+    StatusHandler(Label leftStatus, Label rightStatus) {
         if (instance != null) {
             throw new IllegalStateException("StatusHandler already instantiated, use getInstance() to get an instance");
         }
@@ -87,11 +87,11 @@ public class StatusHandler {
         return instance;
     }
 
-    public void setLoadingGraphic(Node graphic) {
+    void setLoadingGraphic(Node graphic) {
         loadingGraphic = graphic;
     }
 
-    public void setupEventLog(Pane container, TextArea eventLog, Button closeEventLog) {
+    void setupEventLog(Pane container, TextArea eventLog, Button closeEventLog) {
         this.eventLog = eventLog;
         container.managedProperty().bind(container.visibleProperty());
         container.setVisible(false);
