@@ -171,6 +171,16 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
         this.closeReason = closeReason;
     }
 
+    private String name;
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String newName) {
+        name = newName;
+    }
+
     private class ClientInboundHandler extends ChannelInboundHandlerAdapter {
 
         @Override
