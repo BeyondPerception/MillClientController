@@ -10,6 +10,7 @@ import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.Pane;
+import ml.dent.util.DaemonThreadFactory;
 import ml.dent.util.UIUtil;
 
 import java.text.SimpleDateFormat;
@@ -75,11 +76,7 @@ public class StatusHandler {
                 setLeftText(currentStatus.toString());
             }
         };
-        updateExecutor = new ScheduledThreadPoolExecutor(1, runnable -> {
-            Thread res = new Thread(runnable);
-            res.setDaemon(true);
-            return res;
-        });
+        updateExecutor = new ScheduledThreadPoolExecutor(1, new DaemonThreadFactory());
         updateExecutor.scheduleAtFixedRate(updateStatus, 0L, 60L, TimeUnit.SECONDS);
     }
 
