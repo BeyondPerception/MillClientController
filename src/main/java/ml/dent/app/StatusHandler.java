@@ -33,10 +33,18 @@ public class StatusHandler {
     private Label    leftStatus;
     private TextArea eventLog;
 
+    private Node loadingGraphic;
+
     private ScheduledExecutorService updateExecutor;
     private Runnable                 updateStatus;
 
-    public StatusHandler(Label leftStatus, Label rightStatus, Node loadingGraphic) {
+    private static StatusHandler instance;
+
+    public StatusHandler(Label leftStatus, Label rightStatus) {
+        if (instance != null) {
+            throw new IllegalStateException("StatusHandler already instantiated, use getInstance() to get an instance");
+        }
+        instance = this;
         this.leftStatus = leftStatus;
         leftStatus.textProperty().bind(leftText);
         rightStatus.textProperty().bind(rightText);
@@ -73,6 +81,14 @@ public class StatusHandler {
             return res;
         });
         updateExecutor.scheduleAtFixedRate(updateStatus, 0L, 60L, TimeUnit.SECONDS);
+    }
+
+    public static StatusHandler getInstance() {
+        return instance;
+    }
+
+    public void setLoadingGraphic(Node graphic) {
+        loadingGraphic = graphic;
     }
 
     public void setupEventLog(Pane container, TextArea eventLog, Button closeEventLog) {
