@@ -4,25 +4,10 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import ml.dent.util.Markers;
 
-import java.util.concurrent.ConcurrentLinkedQueue;
-
 public class ControllerNetworkClient extends SimpleNetworkClient {
-
-    private ConcurrentLinkedQueue<String> textQ;
-    private StringBuffer                  addText;
 
     public ControllerNetworkClient(String host, int port) {
         super(host, port, '0');
-        textQ = new ConcurrentLinkedQueue<>();
-        addText = new StringBuffer();
-    }
-
-    public boolean isTextReady() {
-        return !textQ.isEmpty();
-    }
-
-    public String getNextText() {
-        return textQ.poll();
     }
 
     @Override
@@ -35,9 +20,7 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
         ChannelHandler[] newHandlers = new ChannelHandler[channelHandlers.length + 2];
         newHandlers[0] = new ControllerOutboundHandler();
         newHandlers[1] = new ControllerInboundHandler();
-        for (int i = 2; i < newHandlers.length; i++) {
-            newHandlers[i] = channelHandlers[i - 2];
-        }
+        System.arraycopy(channelHandlers, 0, newHandlers, 2, newHandlers.length - 2);
 
         return super.connect(newHandlers);
     }
@@ -60,7 +43,7 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
     }
 
     public void setAxis(String axis) {
-        int axisNum;
+        int axisNum = 0;
         switch (axis) {
             case "X":
                 axisNum = 0;
@@ -74,17 +57,11 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
             case "A":
                 axisNum = 3;
                 break;
-            default:
-                axisNum = 0;
         }
 
         write(Markers.AXIS);
         write((byte) axisNum);
         flush();
-    }
-
-    public void requestVideo() {
-        writeAndFlush(Markers.START_VIDEO);
     }
 
     private class ControllerInboundHandler extends ChannelInboundHandlerAdapter {
@@ -100,29 +77,9 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
             byte[] bytes = new byte[buffer.readableBytes()];
             buffer.readBytes(bytes);
 
-            boolean inMsg = false;
-
-            for (int i = 0; i < bytes.length; i++) {
-                if (inMsg) {
-                    if (bytes[i] == Markers.ESC_MSG) {
-                        inMsg = false;
-                        break;
-                    }
-                    if (bytes[i] == '\n') {
-                        addText.append((char) bytes[0]);
-                        textQ.offer(addText.toString());
-                        addText = new StringBuffer();
-                    } else {
-                        addText.append((char) bytes[0]);
-                    }
-                } else {
-                    switch (bytes[i]) {
-                        case Markers.PING_REQUEST:
-                            writeAndFlush(Markers.PING_RESPONSE);
-                            break;
-                        case Markers.MSG:
-                            inMsg = true;
-                    }
+            for (byte aByte : bytes) {
+                if (aByte == Markers.PING_REQUEST) {
+                    writeAndFlush(Markers.PING_RESPONSE);
                 }
             }
 
@@ -130,13 +87,13 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
         }
 
         @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
             cause.printStackTrace();
             ctx.close();
         }
     }
 
-    private class ControllerOutboundHandler extends ChannelOutboundHandlerAdapter {
+    private static class ControllerOutboundHandler extends ChannelOutboundHandlerAdapter {
         @Override
         public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
             super.write(ctx, msg, promise);
