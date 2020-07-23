@@ -61,16 +61,18 @@ public class VideoClient extends SimpleNetworkClient {
     }
 
     public void startVideo(ImageView iv) {
-        System.out.println("Initializing Gstreamer...");
+        BooleanProperty gstDone = new SimpleBooleanProperty(false);
+        logger.offerOperation("Initializing Gstreamer", "Successfully initialized Gstreamer", gstDone);
         Gst.init();
 
         while (!Gst.isInitialized())
             ;
-        System.out.println("Gstreamer initialized");
+        gstDone.set(true);
 
         String parseString = "appsrc name=src is-live=true ! queue ! decodebin ! videoconvert ! appsink name=sink sync=false";
 
-        System.out.println("Building pipeline");
+        BooleanProperty pipelineDone = new SimpleBooleanProperty(false);
+        logger.offerOperation("Building pipeline", "Successfully built pipeline", pipelineDone);
         pipeline = (Pipeline) Gst.parseLaunch(parseString);
         AppSrc src = (AppSrc) pipeline.getElementByName("src");
         src.set("emit-signals", true);
@@ -107,12 +109,13 @@ public class VideoClient extends SimpleNetworkClient {
             System.out.println("Info Code: " + code);
             System.out.println("Info Message: " + message);
         });
+        pipelineDone.set(true);
 
 //		pipeline.getBus().connect((Bus.MESSAGE) (bus, message) -> {
 //			System.out.println("Bus Message : " + message.getStructure());
 //		});
 
-        System.out.println("Playing video");
+        logger.offerStatus("Ready to play video");
         pipeline.play();
     }
 
@@ -121,10 +124,8 @@ public class VideoClient extends SimpleNetworkClient {
             System.out.println("Pipeline is null, returning");
             return;
         }
-        if (pipeline.isPlaying()) {
-            pipeline.stop();
-        }
-        System.out.println("Closing pipline");
+        pipeline.stop();
+        System.out.println("Closing pipeline");
         pipeline.close();
     }
 
