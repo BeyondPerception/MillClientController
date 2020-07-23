@@ -31,7 +31,7 @@ public class VideoClient extends SimpleNetworkClient {
 
     public VideoClient(String host, int port) {
         super(host, port, '1');
-        incomingBytes = new LinkedBlockingQueue<Byte>();
+        incomingBytes = new LinkedBlockingQueue<>();
     }
 
     @Override
@@ -74,23 +74,20 @@ public class VideoClient extends SimpleNetworkClient {
         pipeline = (Pipeline) Gst.parseLaunch(parseString);
         AppSrc src = (AppSrc) pipeline.getElementByName("src");
         src.set("emit-signals", true);
-        src.connect(new AppSrc.NEED_DATA() {
-            @Override
-            public void needData(AppSrc elem, int size) {
-                Buffer buf = new Buffer(size);
-                byte[] bytes = new byte[size];
+        src.connect((AppSrc.NEED_DATA) (elem, size) -> {
+            Buffer buf = new Buffer(size);
+            byte[] bytes = new byte[size];
 
-                for (int i = 0; i < size; i++) {
-                    try {
-                        bytes[i] = (byte) incomingBytes.take();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
+            for (int i = 0; i < size; i++) {
+                try {
+                    bytes[i] = incomingBytes.take();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
-
-                buf.map(true).put(ByteBuffer.wrap(bytes));
-                elem.pushBuffer(buf);
             }
+
+            buf.map(true).put(ByteBuffer.wrap(bytes));
+            elem.pushBuffer(buf);
         });
 
         AppSink sink = (AppSink) pipeline.getElementByName("sink");
