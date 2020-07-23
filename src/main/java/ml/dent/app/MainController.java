@@ -4,6 +4,10 @@ import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.Future;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Pos;
@@ -25,7 +29,6 @@ import ml.dent.video.VideoClient;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 public class MainController {
     private final ControllerNetworkClient networkClient;
@@ -33,10 +36,14 @@ public class MainController {
 
     private final Stage window;
 
+    private StatusHandler statusHandler;
+
     public MainController(Stage window) {
         this.window = window;
         networkClient = new ControllerNetworkClient("bounceserver.tk", 1111);
         videoClient = new VideoClient("bounceserver.tk", 1111);
+        networkClient.setName("Network Client");
+        videoClient.setName("Video Client");
 
         window.setOnCloseRequest(event -> {
             window.close();
@@ -69,8 +76,17 @@ public class MainController {
     @FXML private HBox       imageContainer;
     @FXML private AnchorPane displayPanel;
 
+    @FXML private Label leftStatus;
+    @FXML private Label rightStatus;
+
+    @FXML private VBox     eventLogPopup;
+    @FXML private TextArea eventLog;
+    @FXML private Button   closeEventLog;
+    @FXML private HBox     statusBar;
+
     @FXML
     public void initialize() {
+        /* GUI BINDINGS */
         closeConnection.disableProperty().bind(networkClient.connectionActiveProperty().not());
         networkClient.connectionActiveProperty().addListener(listener -> {
             if (!networkClient.isConnectionActive() && networkClient.isUnexpectedClose()) {
@@ -95,6 +111,13 @@ public class MainController {
         imageContainer.prefHeightProperty().bind(displayPanel.heightProperty());
 
         millControlsContainer.disableProperty().bind(networkClient.connectionActiveProperty().not());
+
+        ProgressIndicator loadingGraphic = new ProgressIndicator();
+        loadingGraphic.prefHeightProperty().bind(statusBar.heightProperty().subtract(5));
+        rightStatus.setGraphicTextGap(0);
+        statusHandler = new StatusHandler(leftStatus, rightStatus, loadingGraphic);
+        statusHandler.setupEventLog(eventLogPopup, eventLog, closeEventLog);
+        /* GUI BINDINGS */
     }
 
     @FXML
@@ -223,23 +246,39 @@ public class MainController {
             UIUtil.showError("Error", "Connection already active", "Error", window);
             return;
         }
+//        new Thread(() -> {
+//            AtomicReference<ChannelFuture> cf = new AtomicReference<>();
+//            UIUtil.showAlert(Alert.AlertType.INFORMATION, "Operation in progress", "Attempting to connect to server", "Please wait...", true, () -> {
+//                // connect can sometimes block while trying to resolve the hostname, so we do a null check
+//                // will only happen with very slow connections (ping >= 1000ms)
+//                if (cf.get() == null)
+//                    return false;
+//                if (client.proxyEnabled())
+//                    return cf.get().isDone() && client.proxyConnectionAttempted();
+//                return cf.get().isDone();
+//            }, window);
+//            cf.set(client.connect());
+//            cf.get().awaitUninterruptibly(); // wait for connect to finish
+//            if (cf.get().isSuccess()) {
+//                UIUtil.showAlert(Alert.AlertType.INFORMATION, "Operation completed successfully", "Successfully connected to server", "Success", false, null, window);
+//            } else {
+//                UIUtil.showError("Operation failed", client.getCloseReason(), "Failed to connect to server", window);
+//            }
+//        }).start();
+        BooleanProperty isDone = new SimpleBooleanProperty(false);
+        BooleanProperty onError = new SimpleBooleanProperty(false);
+        StringProperty completionText = new SimpleStringProperty();
+        statusHandler.offerOperation("Connecting " + client.getName().toLowerCase() + "to the server", completionText, isDone, onError);
         new Thread(() -> {
-            AtomicReference<ChannelFuture> cf = new AtomicReference<>();
-            UIUtil.showAlert(Alert.AlertType.INFORMATION, "Operation in progress", "Attempting to connect to server", "Please wait...", true, () -> {
-                // connect can sometimes block while trying to resolve the hostname, so we do a null check
-                // will only happen with very slow connections (ping >= 1000ms)
-                if (cf.get() == null)
-                    return false;
-                if (client.proxyEnabled())
-                    return cf.get().isDone() && client.proxyConnectionAttempted();
-                return cf.get().isDone();
-            }, window);
-            cf.set(client.connect());
-            cf.get().awaitUninterruptibly(); // wait for connect to finish
-            if (cf.get().isSuccess()) {
-                UIUtil.showAlert(Alert.AlertType.INFORMATION, "Operation completed successfully", "Successfully connected to server", "Success", false, null, window);
+            ChannelFuture cf = client.connect();
+            cf.awaitUninterruptibly();
+            if (cf.isSuccess()) {
+                completionText.set(client.getName() + " successfully connected to the server");
+                isDone.set(true);
             } else {
-                UIUtil.showError("Operation failed", client.getCloseReason(), "Failed to connect to server", window);
+                completionText.set(client.getName() + " failed to connect to the server");
+                onError.set(true);
+                isDone.set(true);
             }
         }).start();
     }
