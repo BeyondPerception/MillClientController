@@ -99,6 +99,10 @@ public class StatusHandler {
         closeEventLog.setOnAction(event -> container.setVisible(false));
     }
 
+    public void offerOperation(String text, String completionText, ReadOnlyBooleanProperty isDone) {
+        offerOperation(text, new SimpleStringProperty(completionText), isDone);
+    }
+
     /**
      * Will display the value of completion text at the moment isDone is invalidated.
      * If the initial value of completion text is not changed, the initial value will be displayed.
