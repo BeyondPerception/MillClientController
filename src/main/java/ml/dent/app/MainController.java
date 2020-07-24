@@ -31,19 +31,15 @@ import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainController {
-    private final ControllerNetworkClient networkClient;
-    private final VideoClient             videoClient;
-
     private final Stage window;
+
+    private ControllerNetworkClient networkClient;
+    private VideoClient             videoClient;
 
     private StatusHandler statusHandler;
 
     public MainController(Stage window) {
         this.window = window;
-        networkClient = new ControllerNetworkClient("bounceserver.tk", 1111);
-        videoClient = new VideoClient("bounceserver.tk", 1111);
-        networkClient.setName("Network Client");
-        videoClient.setName("Video Client");
 
         window.setOnCloseRequest(event -> {
             window.close();
@@ -86,9 +82,21 @@ public class MainController {
 
     @FXML
     public void initialize() {
+        // Status Handler needs to be initialized before video and network client
+        statusHandler = new StatusHandler(leftStatus, rightStatus, window);
+
+        networkClient = new ControllerNetworkClient("bounceserver.tk", 1111);
+        videoClient = new VideoClient("bounceserver.tk", 1111);
+        networkClient.setName("Network Client");
+        videoClient.setName("Video Client");
+
         /* GUI BINDINGS */
-        closeConnection.disableProperty().bind(networkClient.connectionActiveProperty().not());
-        networkClient.connectionActiveProperty().addListener(listener -> {
+        ProgressIndicator loadingGraphic = new ProgressIndicator();
+        loadingGraphic.prefHeightProperty().bind(statusBar.heightProperty().subtract(5));
+        rightStatus.setGraphicTextGap(0);
+        statusHandler.setupEventLog(eventLogPopup, eventLog, closeEventLog);
+        statusHandler.setLoadingGraphic(loadingGraphic);
+
             if (!networkClient.isConnectionActive() && networkClient.isUnexpectedClose()) {
                 handleDisconnect(networkClient);
             }
@@ -246,29 +254,10 @@ public class MainController {
             UIUtil.showError("Error", "Connection already active", "Error", window);
             return;
         }
-//        new Thread(() -> {
-//            AtomicReference<ChannelFuture> cf = new AtomicReference<>();
-//            UIUtil.showAlert(Alert.AlertType.INFORMATION, "Operation in progress", "Attempting to connect to server", "Please wait...", true, () -> {
-//                // connect can sometimes block while trying to resolve the hostname, so we do a null check
-//                // will only happen with very slow connections (ping >= 1000ms)
-//                if (cf.get() == null)
-//                    return false;
-//                if (client.proxyEnabled())
-//                    return cf.get().isDone() && client.proxyConnectionAttempted();
-//                return cf.get().isDone();
-//            }, window);
-//            cf.set(client.connect());
-//            cf.get().awaitUninterruptibly(); // wait for connect to finish
-//            if (cf.get().isSuccess()) {
-//                UIUtil.showAlert(Alert.AlertType.INFORMATION, "Operation completed successfully", "Successfully connected to server", "Success", false, null, window);
-//            } else {
-//                UIUtil.showError("Operation failed", client.getCloseReason(), "Failed to connect to server", window);
-//            }
-//        }).start();
         BooleanProperty isDone = new SimpleBooleanProperty(false);
         BooleanProperty onError = new SimpleBooleanProperty(false);
         StringProperty completionText = new SimpleStringProperty();
-        statusHandler.offerOperation("Connecting " + client.getName().toLowerCase() + "to the server", completionText, isDone, onError);
+        statusHandler.offerOperation("Attempting to connect " + client.getName().toLowerCase() + " to the server", completionText, isDone, onError);
         new Thread(() -> {
             ChannelFuture cf = client.connect();
             cf.awaitUninterruptibly();
@@ -283,15 +272,14 @@ public class MainController {
         }).start();
     }
 
-    private void disconnectClient(SimpleNetworkClient client) {
-        client.disconnect();
-    }
-
     /**
      * Checks to see if the given network client disconnected unexpectedly, if so it tries to automatically reconnect
      */
     private void handleDisconnect(SimpleNetworkClient client) {
         if (client.isUnexpectedClose()) {
+            BooleanProperty isDone = new SimpleBooleanProperty(false);
+            StringProperty completionText = new SimpleStringProperty("Successfully reconnected " + client.getName().toLowerCase() + " to the server");
+            statusHandler.offerOperation("Lost connection to server, trying to reconnect", completionText, isDone);
             UIUtil.runOnJFXThread(() -> {
                 Alert alert = new Alert(Alert.AlertType.ERROR, "Network client lost connection to server, trying to reconnect. Press cancel to stop trying", ButtonType.CANCEL);
                 alert.setTitle("Lost connection");
@@ -299,7 +287,7 @@ public class MainController {
                 alert.initOwner(window);
                 new Thread(() -> {
                     while (!alert.isShowing()) {
-                        // Ensure alert is showing before trying reconnect
+                        // block
                     }
                     ChannelFuture cf;
                     int tries = 1;
@@ -332,6 +320,7 @@ public class MainController {
                             // wait for twice the amount of time before retrying reconnect attempt
                             Thread.sleep(tries * 1000);
                         } catch (InterruptedException ignored) {
+                            break;
                         }
                         tries *= 2;
                     }
@@ -339,6 +328,7 @@ public class MainController {
                 }).start();
                 alert.showAndWait();
             });
+            isDone.set(true);
         }
     }
 
