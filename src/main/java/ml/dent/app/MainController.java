@@ -4,6 +4,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.Future;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
+import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -42,17 +43,23 @@ public class MainController {
         this.window = window;
 
         window.setOnCloseRequest(event -> {
+            System.out.println("Closing window");
             window.close();
+            System.out.println("Consuming event");
             event.consume();
             try {
+                System.out.println("Disconnecting network client");
                 Future<?> future = networkClient.disconnect();
                 future.awaitUninterruptibly();
+                System.out.println("Stopping video");
                 videoClient.stopVideo();
                 while (videoClient.isPlaying())
                     ;
+                System.out.println("Disconnecting video client");
                 future = videoClient.disconnect();
                 future.awaitUninterruptibly();
             } finally {
+                System.out.println("Exiting");
                 System.exit(0);
             }
         });
@@ -97,11 +104,18 @@ public class MainController {
         statusHandler.setupEventLog(eventLogPopup, eventLog, closeEventLog);
         statusHandler.setLoadingGraphic(loadingGraphic);
 
+        // if the network client or the video client is active, allow close connection
+        BooleanBinding onePlusConnectionActive = networkClient.connectionActiveProperty().not().and(videoClient.connectionActiveProperty().not());
+        closeConnection.disableProperty().bind(onePlusConnectionActive);
+        networkClient.connectionActiveProperty().addListener((listener, oldVal, newVal) -> {
             if (!networkClient.isConnectionActive() && networkClient.isUnexpectedClose()) {
                 handleDisconnect(networkClient);
             }
+            if (networkClient.isConnectionActive()) {
+                pingMill();
+            }
         });
-        videoClient.connectionActiveProperty().addListener(listener -> {
+        videoClient.connectionActiveProperty().addListener((listener, oldVal, newVal) -> {
             if (!videoClient.isConnectionActive() && videoClient.isUnexpectedClose()) {
                 handleDisconnect(videoClient);
             }
@@ -118,24 +132,27 @@ public class MainController {
         imageContainer.prefWidthProperty().bind(displayPanel.widthProperty());
         imageContainer.prefHeightProperty().bind(displayPanel.heightProperty());
 
-        millControlsContainer.disableProperty().bind(networkClient.connectionActiveProperty().not());
+        millControlsContainer.disableProperty().bind(networkClient.millAccessProperty().not());
 
-        ProgressIndicator loadingGraphic = new ProgressIndicator();
-        loadingGraphic.prefHeightProperty().bind(statusBar.heightProperty().subtract(5));
-        rightStatus.setGraphicTextGap(0);
-        statusHandler = new StatusHandler(leftStatus, rightStatus, loadingGraphic);
-        statusHandler.setupEventLog(eventLogPopup, eventLog, closeEventLog);
         /* GUI BINDINGS */
+
+        videoClient.startVideo(videoView);
     }
 
     @FXML
-    protected void connectNetworkClient() {
+    protected void connectNetworkClients() {
         connectClient(networkClient);
+        connectClient(videoClient);
     }
 
     @FXML
-    protected void disconnectNetworkClient() {
-        disconnectClient(networkClient);
+    protected void disconnectNetworkClients() {
+        if (networkClient.isConnectionActive()) {
+            networkClient.disconnect();
+        }
+        if (videoClient.isConnectionActive()) {
+            videoClient.disconnect();
+        }
     }
 
     @FXML
@@ -181,18 +198,6 @@ public class MainController {
     @FXML
     protected void stopMill() {
         networkClient.stopMill();
-    }
-
-    @FXML
-    protected void startVideo() {
-        connectClient(videoClient);
-        videoClient.startVideo(videoView);
-    }
-
-    @FXML
-    protected void stopVideo() {
-        videoClient.stopVideo();
-        disconnectClient(videoClient);
     }
 
     @FXML
@@ -346,11 +351,26 @@ public class MainController {
         networkClient.jogMill(direction);
     }
 
-    /**
-     * setSpeed will round given speeds to the nearest whole number
-     */
-    private void setSpeed(double value) {
-        networkClient.setSpeed((int) Math.round(value));
+    private void pingMill() {
+        // wait 10 seconds for mill to respond. Arbitrary number, seems like a reasonable amt. of time to wait
+        BooleanProperty isDone = new SimpleBooleanProperty(false);
+        BooleanProperty onError = new SimpleBooleanProperty(false);
+        StringProperty completionText = new SimpleStringProperty("Received response from mill.");
+        statusHandler.offerOperation("Waiting for response from mill", completionText, isDone, onError);
+        new Thread(() -> {
+            try {
+                boolean recvPing = networkClient.awaitNextPing(1000 * 10);
+                if (!recvPing) {
+                    onError.set(true);
+                    completionText.set("Did not receive response from mill. Terminating connection");
+                    disconnectNetworkClients();
+                }
+                isDone.set(true);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+                statusHandler.offerStatus("Error: interrupted while waiting for response from mill");
+            }
+        }).start();
     }
 
     private void bindVideoTo(Pane pane) {
