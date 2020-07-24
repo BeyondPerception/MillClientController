@@ -1,5 +1,6 @@
 package ml.dent.app;
 
+import javafx.beans.InvalidationListener;
 import javafx.beans.property.*;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableSet;
@@ -10,6 +11,7 @@ import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.Pane;
+import javafx.stage.Window;
 import ml.dent.util.DaemonThreadFactory;
 import ml.dent.util.UIUtil;
 
@@ -39,13 +41,18 @@ public class StatusHandler {
     private ScheduledExecutorService updateExecutor;
     private Runnable                 updateStatus;
 
+    private Window window;
+
     private static StatusHandler instance;
 
-    StatusHandler(Label leftStatus, Label rightStatus) {
+    StatusHandler(Label leftStatus, Label rightStatus, Window window) {
         if (instance != null) {
             throw new IllegalStateException("StatusHandler already instantiated, use getInstance() to get an instance");
         }
         instance = this;
+
+        this.window = window;
+
         this.leftStatus = leftStatus;
         leftStatus.textProperty().bind(leftText);
         rightStatus.textProperty().bind(rightText);
@@ -112,12 +119,15 @@ public class StatusHandler {
      * Will display additional alert if onError is set to true the moment isDone is invalidated.
      */
     public void offerOperation(String text, StringProperty completionText, ReadOnlyBooleanProperty isDone, ReadOnlyBooleanProperty onError) {
-        offerStatus(text);
         processes.add(new StatusJob(text, completionText, System.currentTimeMillis(), isDone, onError));
     }
 
     public void offerStatus(String text) {
-        offerStatusJob(new StatusJob(text, System.currentTimeMillis()));
+        offerStatus(text, System.currentTimeMillis());
+    }
+
+    private void offerStatus(String text, long time) {
+        offerStatusJob(new StatusJob(text, time));
         StatusJob latest = statusMessages.peekLast();
         if (latest != null) {
             currentStatus = latest;
@@ -147,25 +157,38 @@ public class StatusHandler {
     }
 
     private class StatusJob {
-        private String name;
-        private long   timeStarted;
+        private String                  name;
+        private long                    timeStarted;
+        private ReadOnlyBooleanProperty isDone;
+        private ReadOnlyBooleanProperty onError;
+        private ReadOnlyStringProperty  completionText;
+
+        private InvalidationListener completionListener;
 
         public StatusJob(String name, StringProperty completionText, long timeStarted, ReadOnlyBooleanProperty isDone, ReadOnlyBooleanProperty onError) {
             this.name = name;
             this.timeStarted = timeStarted;
+            this.isDone = isDone;
+            this.completionText = completionText;
+            this.onError = onError;
 
-            isDone.addListener(listener -> {
-                offerStatus(completionText.get());
-                processes.remove(this);
-                if (onError.get()) {
-                    // TODO display alert to gui
-                }
-            });
+            completionListener = listener -> operationComplete();
+            isDone.addListener(completionListener);
         }
 
         public StatusJob(String name, long timeStarted) {
             this.name = name;
             this.timeStarted = timeStarted;
+        }
+
+        private void operationComplete() {
+            offerStatus(name, timeStarted);
+            offerStatus(completionText.get());
+            processes.remove(this);
+            if (onError.get()) {
+                UIUtil.showError("Error", completionText.get(), "Error during operation", window);
+            }
+            isDone.removeListener(completionListener);
         }
 
         public String getName() {
