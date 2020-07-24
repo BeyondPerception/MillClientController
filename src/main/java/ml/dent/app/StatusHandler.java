@@ -66,11 +66,11 @@ public class StatusHandler {
             } else if (listener.wasRemoved()) {
                 if (listener.getElementRemoved().getName().equals(rightText.get())) {
                     processes.stream().findFirst().ifPresent(n -> setRightText(n.getName()));
-                    rightGraphic.set(loadingGraphic);
+                    setRightGraphic(loadingGraphic);
                 }
             } else {
                 processes.stream().findFirst().ifPresent(n -> setRightText(n.getName()));
-                rightGraphic.set(loadingGraphic);
+                setRightGraphic(loadingGraphic);
             }
         });
 
@@ -154,6 +154,10 @@ public class StatusHandler {
                 rightText.set(val);
             }
         });
+    }
+
+    private void setRightGraphic(Node graphic) {
+        UIUtil.runOnJFXThread(() -> rightGraphic.set(graphic));
     }
 
     private class StatusJob {
