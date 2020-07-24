@@ -81,7 +81,7 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
     private BooleanProperty isMillAccessible = new SimpleBooleanProperty(false);
 
     public ReadOnlyBooleanProperty millAccessProperty() {
-        return BooleanProperty.readOnlyBooleanProperty(isMillAccessible);
+        return isMillAccessible;
     }
 
     private BooleanProperty pingSent = new SimpleBooleanProperty(false);
@@ -111,7 +111,7 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
                         pingSent.set(true);
                     }
                 }
-            }, 0L, 5L, TimeUnit.SECONDS);
+            }, 0L, 1L, TimeUnit.SECONDS);
 
             super.channelActive(ctx);
         }
