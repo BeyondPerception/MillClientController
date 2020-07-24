@@ -21,8 +21,6 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
 
     private boolean proxyEnabled;
 
-    private String closeReason;
-
     /**
      * @param channel provides the channel that this client can send and receive
      *                messages on, this client will only send and receive messages
@@ -163,14 +161,6 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
 
     private AtomicBoolean proxyConnectionEstablished;
 
-    public String getCloseReason() {
-        return closeReason;
-    }
-
-    public void setCloseReason(String closeReason) {
-        this.closeReason = closeReason;
-    }
-
     private String name;
 
     public String getName() {
@@ -234,7 +224,6 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            closeReason = cause.getMessage();
             super.exceptionCaught(ctx, cause);
         }
     }

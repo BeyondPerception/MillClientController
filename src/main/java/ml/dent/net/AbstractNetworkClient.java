@@ -38,6 +38,8 @@ public abstract class AbstractNetworkClient {
      */
     private final BooleanProperty connectionStatusProperty = new SimpleBooleanProperty(false);
 
+    private String closeReason;
+
     public AbstractNetworkClient(String host, int port) {
         this.host = host;
         this.port = port;
@@ -104,7 +106,10 @@ public abstract class AbstractNetworkClient {
         }).option(ChannelOption.TCP_NODELAY, true);
 
         connectionFuture = bootstrap.connect();
-        connectionFuture.addListener(future -> connectCalled = false);
+        connectionFuture.addListener(future -> {
+            connectCalled = false;
+            closeReason = null;
+        });
 
         channel = connectionFuture.channel();
 
@@ -132,6 +137,7 @@ public abstract class AbstractNetworkClient {
             return null;
         }
         disconnectCalled = true;
+        closeReason = "Connection closed by user";
         channel.disconnect();
         return group.shutdownGracefully();
     }
@@ -185,7 +191,7 @@ public abstract class AbstractNetworkClient {
      * @return A BooleanProperty object that wraps the connection status of the channel
      */
     public ReadOnlyBooleanProperty connectionActiveProperty() {
-        return BooleanProperty.readOnlyBooleanProperty(connectionStatusProperty);
+        return connectionStatusProperty;
     }
 
     /**
@@ -208,6 +214,13 @@ public abstract class AbstractNetworkClient {
     }
 
     /**
+     * @return The reason this client's connection was closed. If the connection was never started or is still active, returns null.
+     */
+    public String getCloseReason() {
+        return closeReason;
+    }
+
+    /**
      * @return If the close of the connection was unexpected, returns false if
      * connection is still active
      */
@@ -227,6 +240,7 @@ public abstract class AbstractNetworkClient {
     }
 
     private class InboundHandler extends ChannelInboundHandlerAdapter {
+
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
             connectionStatusProperty.set(true);
@@ -237,6 +251,13 @@ public abstract class AbstractNetworkClient {
         public void channelInactive(ChannelHandlerContext ctx) throws Exception {
             connectionStatusProperty.set(false);
             super.channelInactive(ctx);
+        }
+
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+            // end of the pipeline, handle the exception
+            closeReason = cause.getMessage();
+            ctx.close();
         }
     }
 }
