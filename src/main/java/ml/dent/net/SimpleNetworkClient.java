@@ -1,6 +1,7 @@
 package ml.dent.net;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.util.CharsetUtil;
@@ -15,23 +16,40 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class SimpleNetworkClient extends AbstractNetworkClient {
 
-    private char channel;
-
-    private int internalPort;
+    private static final int BUFFER_SIZE = 256;
 
     private boolean proxyEnabled;
+    private boolean bounceServerProtocol;
+    private boolean buffering;
+    private int     channel;
+    private int     internalPort;
 
     /**
+     * @param host    The hostname to connect to
+     * @param port    The server's port to connect to
      * @param channel provides the channel that this client can send and receive
      *                messages on, this client will only send and receive messages
      *                on this channel
      */
-    public SimpleNetworkClient(String host, int port, char channel) {
+    public SimpleNetworkClient(String host, int port, int channel) {
+        this(host, port, channel, false);
+    }
+
+    /**
+     * @param buffer  Unless your write operations are low-frequency, not enabling buffering can
+     *                severely impact performance and put unnecessary load on the CPU.
+     * @param channel provides the channel that this client can send and receive
+     *                messages on, this client will only send and receive messages
+     *                on this channel
+     */
+    public SimpleNetworkClient(String host, int port, int channel, boolean buffer) {
         super(host, port);
         this.channel = channel;
+        this.buffering = buffer;
         internalPort = getPort();
         proxyConnectionEstablished = new AtomicBoolean(false);
         authenticationMessage = "hi";
+        bounceServerProtocol = true;
     }
 
     @Override
@@ -44,9 +62,7 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
         ChannelHandler[] newHandlers = new ChannelHandler[channelHandlers.length + 2];
         newHandlers[0] = new ClientOutboundHandler();
         newHandlers[1] = new ClientInboundHandler();
-        for (int i = 2; i < newHandlers.length; i++) {
-            newHandlers[i] = channelHandlers[i - 2];
-        }
+        System.arraycopy(channelHandlers, 0, newHandlers, 2, newHandlers.length - 2);
 
         return super.connect(newHandlers);
     }
@@ -55,10 +71,24 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
         return write(Unpooled.copiedBuffer(s, CharsetUtil.UTF_8));
     }
 
-    public ChannelFuture write(byte b) {
-        ByteBuf buf = Unpooled.buffer(0x1);
-        buf.writeByte(b);
-        return write(buf);
+    private PooledByteBufAllocator alloc = new PooledByteBufAllocator();
+    private ByteBuf                curBuffer;
+
+    public void write(byte b) {
+        if (buffering) {
+            if (curBuffer == null) {
+                curBuffer = alloc.buffer(BUFFER_SIZE, BUFFER_SIZE);
+            }
+            if (curBuffer.writableBytes() <= 0) {
+                write(curBuffer);
+                curBuffer = alloc.buffer(BUFFER_SIZE, BUFFER_SIZE);
+            }
+            curBuffer.writeByte(b);
+        } else {
+            ByteBuf buf = alloc.buffer();
+            buf.writeByte(b);
+            write(buf);
+        }
     }
 
     public ChannelFuture write(Object o) {
@@ -73,8 +103,8 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
         return getChannel().write(o);
     }
 
-    public Channel flush() {
-        return getChannel().flush();
+    public void flush() {
+        getChannel().flush();
     }
 
     public ChannelFuture writeAndFlush(String s) {
@@ -83,10 +113,9 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
         return cf;
     }
 
-    public ChannelFuture writeAndFlush(byte b) {
-        ChannelFuture cf = write(b);
+    public void writeAndFlush(byte b) {
+        write(b);
         flush();
-        return cf;
     }
 
     public ChannelFuture writeAndFlush(Object o) {
@@ -109,6 +138,14 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
 
     public boolean proxyEnabled() {
         return proxyEnabled;
+    }
+
+    public void setBounceServerProtocol(boolean bounceServerProtocol) {
+        this.bounceServerProtocol = bounceServerProtocol;
+    }
+
+    public boolean getBounceServerProtocol() {
+        return bounceServerProtocol;
     }
 
     private boolean proxyAttempted;
@@ -152,11 +189,7 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
             return false;
         }
 
-        if (proxyEnabled() && !isProxyEstablished()) {
-            return false;
-        }
-
-        return true;
+        return !proxyEnabled() || isProxyEstablished();
     }
 
     private AtomicBoolean proxyConnectionEstablished;
@@ -180,16 +213,12 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
                         + "Proxy-Connection: Keep-Alive\r\n" + "\r\n";
 
                 ctx.writeAndFlush(Unpooled.copiedBuffer(httpReq, CharsetUtil.UTF_8));
-            } else {
-                if (authenticationMessage != null) {
-                    ctx.writeAndFlush(Unpooled.copiedBuffer(authenticationMessage, CharsetUtil.UTF_8));
-                }
-                if (channel != '-') {
-                    ctx.writeAndFlush(Unpooled.copiedBuffer(String.valueOf(channel), CharsetUtil.UTF_8));
-                }
+            } else if (!bounceServerProtocol) {
+                super.channelActive(ctx);
             }
-            super.channelActive(ctx);
         }
+
+        private AtomicBoolean verStringRecv = new AtomicBoolean(false);
 
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
@@ -197,29 +226,34 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
                 String estConfirm = ((ByteBuf) msg).toString(CharsetUtil.UTF_8);
                 if (checkEstablished(estConfirm)) {
                     proxyConnectionEstablished.set(true);
-
+                    super.channelActive(ctx);
+                }
+                proxyAttempted = true;
+            } else if (bounceServerProtocol) {
+                if (!verStringRecv.get()) {
+                    String verString = ((ByteBuf) msg).toString(CharsetUtil.UTF_8);
+                    String channelBytesStr = verString.substring(0, verString.indexOf("-"));
+                    int channelBytes = Integer.parseInt(channelBytesStr);
                     // We use ctx.writeAndFlush instead of our own write method because we don't
                     // want the message traveling through the entire pipeline
                     if (authenticationMessage != null) {
                         ctx.writeAndFlush(Unpooled.copiedBuffer(authenticationMessage, CharsetUtil.UTF_8));
                     }
-                    if (channel != '-') {
-                        ctx.writeAndFlush(Unpooled.copiedBuffer(Character.toString(channel), CharsetUtil.UTF_8));
+                    if (channel != -1) {
+                        ctx.writeAndFlush(Unpooled.copiedBuffer(String.format("%0" + channelBytes + "x", channel), CharsetUtil.UTF_8));
                     }
+                    verStringRecv.set(true);
+                    super.channelActive(ctx);
+                } else {
+                    super.channelRead(ctx, msg);
                 }
             } else {
                 super.channelRead(ctx, msg);
             }
-            if (proxyEnabled()) {
-                proxyAttempted = true;
-            }
         }
 
         private boolean checkEstablished(String confirm) {
-            if (confirm.contains("Established")) {
-                return true;
-            }
-            return false;
+            return confirm.contains("Established");
         }
 
         @Override
@@ -228,11 +262,10 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
         }
     }
 
-    private class ClientOutboundHandler extends ChannelOutboundHandlerAdapter {
+    private static class ClientOutboundHandler extends ChannelOutboundHandlerAdapter {
         @Override
         public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
             super.write(ctx, msg, promise);
         }
-
     }
 }
