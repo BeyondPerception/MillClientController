@@ -6,6 +6,7 @@ import javafx.beans.InvalidationListener;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
+import ml.dent.app.StatusHandler;
 import ml.dent.util.DaemonThreadFactory;
 import ml.dent.util.Markers;
 
@@ -18,6 +19,8 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
 
     private ScheduledThreadPoolExecutor pingScheduler = new ScheduledThreadPoolExecutor(1, new DaemonThreadFactory());
     private ScheduledFuture<?>          pingFuture;
+
+    private StatusHandler logger = StatusHandler.getInstance();
 
     public ControllerNetworkClient(String host, int port) {
         super(host, port, '0');
@@ -100,17 +103,22 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
     }
 
     private class ControllerInboundHandler extends ChannelInboundHandlerAdapter {
+
+        private long count;
+
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            count = 0;
             pingFuture = pingScheduler.scheduleAtFixedRate(() -> {
                 if (pingSent.get()) {
                     isMillAccessible.set(false);
-                } else {
-                    if (isConnectionActive()) {
-                        writeAndFlush(Markers.PING_REQUEST);
-                        pingSent.set(true);
-                    }
                 }
+                if (count % 2 == 0 || !pingSent.get() && isConnectionActive()) {
+                    count = 0;
+                    writeAndFlush(Markers.PING_REQUEST);
+                    pingSent.set(true);
+                }
+                count++;
             }, 0L, 1L, TimeUnit.SECONDS);
 
             super.channelActive(ctx);
@@ -128,15 +136,18 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
             byte[] bytes = new byte[buffer.readableBytes()];
             buffer.readBytes(bytes);
 
-            for (byte aByte : bytes) {
-                if (aByte == Markers.PING_REQUEST) {
+            for (byte b : bytes) {
+                if (b == Markers.PING_REQUEST) {
+                    logger.offerStatus("Recv ping request", StatusHandler.MORE);
                     writeAndFlush(Markers.PING_RESPONSE);
-                }
-                if (aByte == Markers.PING_RESPONSE) {
+                } else if (b == Markers.PING_RESPONSE) {
+                    logger.offerStatus("Recv ping response", StatusHandler.MORE);
                     if (pingSent.get()) {
                         pingSent.set(false);
                     }
                     isMillAccessible.set(true);
+                } else {
+                    logger.offerStatus("Recv unknown byte: " + b, StatusHandler.MORE);
                 }
             }
 
