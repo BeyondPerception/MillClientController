@@ -9,13 +9,20 @@ import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
+import javafx.event.EventType;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
+import javafx.geometry.Bounds;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
@@ -29,6 +36,8 @@ import ml.dent.util.UIUtil;
 import ml.dent.video.VideoClient;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainController {
@@ -65,12 +74,14 @@ public class MainController {
         });
     }
 
+
     @FXML private boolean enableSSL;
     @FXML private boolean enableProxy;
 
     @FXML private MenuItem closeConnection;
 
-    @FXML private VBox millControlsContainer;
+    @FXML private SplitPane controlWindow;
+    @FXML private VBox      millControlsContainer;
 
     @FXML private Slider speedControl;
     @FXML private Label  speedDisplay;
@@ -86,6 +97,17 @@ public class MainController {
     @FXML private TextArea eventLog;
     @FXML private Button   closeEventLog;
     @FXML private HBox     statusBar;
+
+    @FXML private Button XPlus;
+    @FXML private Button XMinus;
+    @FXML private Button YPlus;
+    @FXML private Button YMinus;
+    @FXML private Button ZPlus;
+    @FXML private Button ZMinus;
+    @FXML private Button APlus;
+    @FXML private Button AMinus;
+
+    private HashMap<KeyCode, Button> keymap;
 
     @FXML
     public void initialize() {
@@ -108,16 +130,21 @@ public class MainController {
         BooleanBinding onePlusConnectionActive = networkClient.connectionActiveProperty().not().and(videoClient.connectionActiveProperty().not());
         closeConnection.disableProperty().bind(onePlusConnectionActive);
         networkClient.connectionActiveProperty().addListener((listener, oldVal, newVal) -> {
-            if (!networkClient.isConnectionActive() && networkClient.isUnexpectedClose()) {
-                handleDisconnect(networkClient);
-            }
-            if (networkClient.isConnectionActive()) {
+            if (!networkClient.isConnectionActive()) {
+                if (networkClient.isUnexpectedClose()) {
+                    handleDisconnect(networkClient);
+                }
+                statusHandler.offerStatus("Network client disconnected from server", StatusHandler.INFO);
+            } else {
                 pingMill();
             }
         });
         videoClient.connectionActiveProperty().addListener((listener, oldVal, newVal) -> {
-            if (!videoClient.isConnectionActive() && videoClient.isUnexpectedClose()) {
-                handleDisconnect(videoClient);
+            if (!videoClient.isConnectionActive()) {
+                if (videoClient.isUnexpectedClose()) {
+                    handleDisconnect(videoClient);
+                }
+                statusHandler.offerStatus("Video client disconnected from server", StatusHandler.INFO);
             }
         });
         speedControl.valueProperty().addListener((obs, oldVal, newVal) -> {
@@ -133,10 +160,35 @@ public class MainController {
         imageContainer.prefHeightProperty().bind(displayPanel.heightProperty());
 
         millControlsContainer.disableProperty().bind(networkClient.millAccessProperty().not());
+        networkClient.millAccessProperty().addListener((obv, oldVal, newVal) -> {
+            if ((newVal)) {
+                statusHandler.offerStatus("Connection to mill active", StatusHandler.INFO);
+            } else {
+                statusHandler.offerStatus("Lost connection to mill", StatusHandler.INFO);
+            }
+        });
+
+        /* Key Bindings */
+
+        keymap = new HashMap<KeyCode, Button>() {
+            {
+                put(KeyCode.RIGHT, XPlus);
+                put(KeyCode.LEFT, XMinus);
+                put(KeyCode.UP, YPlus);
+                put(KeyCode.DOWN, YMinus);
+                put(KeyCode.PAGE_UP, ZPlus);
+                put(KeyCode.PAGE_DOWN, ZMinus);
+                put(KeyCode.X, APlus);
+                put(KeyCode.Z, AMinus);
+            }
+        };
+        setKeymapOnNode(controlWindow);
 
         /* GUI BINDINGS */
 
         videoClient.startVideo(videoView);
+        //debug
+        statusHandler.setVerbosity(StatusHandler.ALL);
     }
 
     @FXML
@@ -217,14 +269,15 @@ public class MainController {
             videoPopout.fireEvent(new WindowEvent(videoPopout, WindowEvent.WINDOW_CLOSE_REQUEST));
         } else {
             AnchorPane root = new AnchorPane();
-            HBox popoutImageContainer = new HBox();
-            popoutImageContainer.setAlignment(Pos.CENTER);
-            popoutImageContainer.prefWidthProperty().bind(root.widthProperty());
-            popoutImageContainer.prefHeightProperty().bind(root.heightProperty());
-            popoutImageContainer.getChildren().add(videoView);
-            root.getChildren().add(popoutImageContainer);
+            HBox popoutContainer = new HBox();
+            popoutContainer.setAlignment(Pos.CENTER);
+            popoutContainer.prefWidthProperty().bind(root.widthProperty());
+            popoutContainer.prefHeightProperty().bind(root.heightProperty());
+            popoutContainer.getChildren().add(videoView);
+            root.getChildren().add(popoutContainer);
+            setKeymapOnNode(root);
 
-            bindVideoTo(popoutImageContainer);
+            bindVideoTo(popoutContainer);
 
             videoPopout.setOnCloseRequest(event -> {
                 event.consume();
@@ -237,6 +290,35 @@ public class MainController {
 
             videoPopout.setScene(new Scene(root));
             videoPopout.show();
+        }
+    }
+
+    private Stage eventLogPopout;
+
+    @FXML
+    protected void popoutEventLog() {
+        if (eventLogPopout == null) {
+            eventLogPopout = new Stage();
+        }
+        if (eventLogPopout.isShowing()) {
+            eventLogPopout.fireEvent(new WindowEvent(eventLogPopout, WindowEvent.WINDOW_CLOSE_REQUEST));
+        } else {
+            AnchorPane root = new AnchorPane();
+            eventLog.prefWidthProperty().bind(root.widthProperty());
+            eventLog.prefHeightProperty().bind(root.heightProperty());
+            root.getChildren().add(eventLog);
+
+            fireMouseEvent(leftStatus, MouseEvent.MOUSE_CLICKED);
+
+            eventLogPopout.setOnCloseRequest(event -> {
+                event.consume();
+                eventLogPopout.close();
+                eventLogPopup.getChildren().add(eventLog);
+                fireMouseEvent(leftStatus, MouseEvent.MOUSE_CLICKED);
+            });
+
+            eventLogPopout.setScene(new Scene(root));
+            eventLogPopout.show();
         }
     }
 
@@ -256,13 +338,13 @@ public class MainController {
 
     private void connectClient(SimpleNetworkClient client) {
         if (client.isConnectionActive()) {
-            UIUtil.showError("Error", "Connection already active", "Error", window);
+            statusHandler.offerError("Connection already active", "Error");
             return;
         }
         BooleanProperty isDone = new SimpleBooleanProperty(false);
         BooleanProperty onError = new SimpleBooleanProperty(false);
         StringProperty completionText = new SimpleStringProperty();
-        statusHandler.offerOperation("Attempting to connect " + client.getName().toLowerCase() + " to the server", completionText, isDone, onError);
+        statusHandler.offerOperation("Attempting to connect " + client.getName().toLowerCase() + " to the server", completionText, isDone, onError, StatusHandler.INFO);
         new Thread(() -> {
             ChannelFuture cf = client.connect();
             cf.awaitUninterruptibly();
@@ -284,7 +366,7 @@ public class MainController {
         if (client.isUnexpectedClose()) {
             BooleanProperty isDone = new SimpleBooleanProperty(false);
             StringProperty completionText = new SimpleStringProperty("Successfully reconnected " + client.getName().toLowerCase() + " to the server");
-            statusHandler.offerOperation("Lost connection to server, trying to reconnect", completionText, isDone);
+            statusHandler.offerOperation("Lost connection to server, trying to reconnect", completionText, isDone, StatusHandler.INFO);
             UIUtil.runOnJFXThread(() -> {
                 Alert alert = new Alert(Alert.AlertType.ERROR, "Network client lost connection to server, trying to reconnect. Press cancel to stop trying", ButtonType.CANCEL);
                 alert.setTitle("Lost connection");
@@ -352,13 +434,13 @@ public class MainController {
     }
 
     private void pingMill() {
-        // wait 10 seconds for mill to respond. Arbitrary number, seems like a reasonable amt. of time to wait
         BooleanProperty isDone = new SimpleBooleanProperty(false);
         BooleanProperty onError = new SimpleBooleanProperty(false);
         StringProperty completionText = new SimpleStringProperty("Received response from mill.");
-        statusHandler.offerOperation("Waiting for response from mill", completionText, isDone, onError);
+        statusHandler.offerOperation("Waiting for response from mill", completionText, isDone, onError, StatusHandler.INFO);
         new Thread(() -> {
             try {
+                // wait 10 seconds for mill to respond. Arbitrary number, seems like a reasonable amt. of time to wait
                 boolean recvPing = networkClient.awaitNextPing(1000 * 10);
                 if (!recvPing) {
                     onError.set(true);
@@ -368,7 +450,7 @@ public class MainController {
                 isDone.set(true);
             } catch (InterruptedException e) {
                 e.printStackTrace();
-                statusHandler.offerStatus("Error: interrupted while waiting for response from mill");
+                statusHandler.offerStatus("Error: interrupted while waiting for response from mill", StatusHandler.ERROR);
             }
         }).start();
     }
@@ -378,5 +460,56 @@ public class MainController {
         videoView.fitHeightProperty().unbind();
         videoView.fitWidthProperty().bind(pane.widthProperty());
         videoView.fitHeightProperty().bind(pane.heightProperty());
+    }
+
+    private void setKeymapOnNode(Node area) {
+        AtomicBoolean isKeyDown = new AtomicBoolean();
+
+        area.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (!networkClient.isConnectionActive() || isKeyDown.get()) {
+                return;
+            }
+            KeyCode kc = event.getCode();
+            if (keymap.containsKey(kc)) {
+                event.consume();
+                isKeyDown.set(true);
+                fireMouseEvent(keymap.get(kc), MouseEvent.MOUSE_PRESSED);
+            }
+        });
+
+        area.addEventFilter(KeyEvent.KEY_RELEASED, event -> {
+            if (!networkClient.isConnectionActive() || !isKeyDown.get()) {
+                return;
+            }
+            KeyCode kc = event.getCode();
+            if (keymap.containsKey(kc)) {
+                event.consume();
+                fireMouseEvent(keymap.get(kc), MouseEvent.MOUSE_RELEASED);
+                isKeyDown.set(false);
+            }
+        });
+    }
+
+    private void fireMouseEvent(Node node, EventType<MouseEvent> type) {
+        Bounds sceneBounds = node.localToScene(node.getBoundsInLocal());
+        Bounds screenBounds = node.localToScreen(node.getBoundsInLocal());
+        node.fireEvent(new MouseEvent(type,
+                sceneBounds.getMinX(),
+                sceneBounds.getMinY(),
+                screenBounds.getMinX(),
+                screenBounds.getMinY(),
+                MouseButton.PRIMARY,
+                1,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                null));
     }
 }
