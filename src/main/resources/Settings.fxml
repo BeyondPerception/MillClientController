@@ -13,7 +13,7 @@
                   <VBox alignment="TOP_CENTER" spacing="5.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
                      <children>
                         <Button mnemonicParsing="false" onAction="#switchToNetworkSettingsView" prefHeight="26.0" prefWidth="295.0" text="Connection" textAlignment="CENTER" VBox.vgrow="NEVER" />
-                        <Button mnemonicParsing="false" prefHeight="26.0" prefWidth="394.0" text="Video" visible="false" />
+                        <Button mnemonicParsing="false" onAction="#switchToLoggingSettingsView" prefHeight="26.0" prefWidth="394.0" text="Logging" />
                      </children>
                      <opaqueInsets>
                         <Insets />

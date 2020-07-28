@@ -3,10 +3,7 @@ package ml.dent.app;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
-import javafx.scene.control.CheckBox;
-import javafx.scene.control.Label;
-import javafx.scene.control.SplitPane;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 import javafx.stage.Stage;
 import ml.dent.net.ControllerNetworkClient;
 import ml.dent.util.UIUtil;
@@ -20,6 +17,8 @@ public class SettingsController {
     private VideoClient             videoClient;
 
     private Stage parent;
+
+    private StatusHandler statusHandler = StatusHandler.getInstance();
 
     public SettingsController(ControllerNetworkClient networkClient, VideoClient videoClient, Stage parent) {
         this.networkClient = networkClient;
@@ -44,11 +43,13 @@ public class SettingsController {
     @FXML
     protected boolean saveSettings() {
         String settingsView = currentViewName.getText();
-        System.out.println(settingsView);
         boolean success = false;
         switch (settingsView) {
             case "network":
                 success = configureNetworkSettings(hostInput.getText().trim(), portInput.getText().trim(), enableSSL.isSelected(), enableProxy.isSelected(), internalPortInput.getText().trim());
+                break;
+            case "logging":
+                success = saveLogLevel();
                 break;
             case "video":
                 // configure video
@@ -75,10 +76,10 @@ public class SettingsController {
 
     @FXML
     protected void switchToNetworkSettingsView() {
-        FXMLLoader networkSettingsLoader = new FXMLLoader(getClass().getResource("/NetworkSettings.fxml"));
-        networkSettingsLoader.setController(this);
+        FXMLLoader settingsLoader = new FXMLLoader(getClass().getResource("/NetworkSettings.fxml"));
+        settingsLoader.setController(this);
         try {
-            Parent view = networkSettingsLoader.load();
+            Parent view = settingsLoader.load();
             hostInput.setText(networkClient.getHost());
             portInput.setText(Integer.toString(networkClient.getPort()));
             enableSSL.setSelected(networkClient.sslEnabled());
@@ -87,8 +88,31 @@ public class SettingsController {
             splitPane.getItems().set(1, view);
         } catch (IOException e) {
             e.printStackTrace();
-            UIUtil.showError("GUI Error", e.getMessage(), "Failed to load network settings view", parent);
+            statusHandler.offerError("Failed to load network settings view", "GUI Error");
         }
+    }
+
+    @FXML ChoiceBox<String> logLevelPicker;
+
+    @FXML
+    protected void switchToLoggingSettingsView() {
+        FXMLLoader settingsLoader = new FXMLLoader(getClass().getResource("/LoggingSettings.fxml"));
+        settingsLoader.setController(this);
+        try {
+            Parent view = settingsLoader.load();
+            logLevelPicker.getItems().addAll(statusHandler.levelMap.keySet());
+            logLevelPicker.setValue(statusHandler.getVerbosityAsString(statusHandler.getVerbosity()));
+            splitPane.getItems().set(1, view);
+        } catch (IOException e) {
+            e.printStackTrace();
+            statusHandler.offerError("Failed to load logging settings view", "GUI Error");
+        }
+    }
+
+    private boolean saveLogLevel() {
+        String logLevel = logLevelPicker.getValue();
+        statusHandler.setVerbosity(statusHandler.getVerbosityFromString(logLevel));
+        return true;
     }
 
     private boolean configureNetworkSettings(String host, String port, boolean ssl, boolean proxy, String internalPort) {
