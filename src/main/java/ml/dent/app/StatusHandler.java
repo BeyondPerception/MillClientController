@@ -206,8 +206,8 @@ public class StatusHandler {
     }
 
     private void offerStatusJob(StatusJob status) {
-        statusMessages.offerLast(status);
         if (status.logLevel <= verbosity) {
+            statusMessages.offerLast(status);
             appendToLog(status.dateFormat() + "\n\n");
         }
     }
