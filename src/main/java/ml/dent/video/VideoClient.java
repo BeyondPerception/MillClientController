@@ -72,7 +72,7 @@ public class VideoClient extends SimpleNetworkClient {
         String parseString = "appsrc name=src is-live=true ! queue ! decodebin ! videoconvert ! appsink name=sink sync=false";
 
         BooleanProperty pipelineDone = new SimpleBooleanProperty(false);
-        logger.offerOperation("Building pipeline", "Successfully built pipeline", pipelineDone);
+        logger.offerOperation("Building pipeline", "Successfully built pipeline", pipelineDone, StatusHandler.DEBUG);
         pipeline = (Pipeline) Gst.parseLaunch(parseString);
         AppSrc src = (AppSrc) pipeline.getElementByName("src");
         src.set("emit-signals", true);
@@ -115,16 +115,16 @@ public class VideoClient extends SimpleNetworkClient {
 //			System.out.println("Bus Message : " + message.getStructure());
 //		});
 
-        logger.offerStatus("Ready to play video");
+        logger.offerStatus("Ready to play video", StatusHandler.INFO);
         pipeline.play();
     }
 
     public void stopVideo() {
         if (pipeline == null) {
-            System.out.println("Pipeline is null, returning");
+            logger.offerStatus("Pipeline is null, returning", StatusHandler.DEBUG);
             return;
         }
-        pipeline.stop();
+//        pipeline.stop();
         System.out.println("Closing pipeline");
         pipeline.close();
     }
