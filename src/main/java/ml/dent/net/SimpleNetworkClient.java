@@ -5,7 +5,11 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.util.CharsetUtil;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.ReadOnlyBooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 
+import java.net.ConnectException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -23,6 +27,9 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
     private boolean buffering;
     private int     channel;
     private int     internalPort;
+
+    private BooleanProperty connectionStatusProperty = new SimpleBooleanProperty(false);
+    private BooleanProperty connectionAttempted      = new SimpleBooleanProperty(false);
 
     /**
      * @param host    The hostname to connect to
@@ -54,17 +61,62 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
 
     @Override
     public ChannelFuture connect() {
-        return super.connect(new ClientOutboundHandler(), new ClientInboundHandler());
+        return connect(new ClientOutboundHandler(), new ClientInboundHandler(), new ActiveHandler());
     }
 
     @Override
     public ChannelFuture connect(ChannelHandler... channelHandlers) {
-        ChannelHandler[] newHandlers = new ChannelHandler[channelHandlers.length + 2];
+        connectionAttempted.set(false);
+        ChannelHandler[] newHandlers = new ChannelHandler[channelHandlers.length + 3];
         newHandlers[0] = new ClientOutboundHandler();
         newHandlers[1] = new ClientInboundHandler();
-        System.arraycopy(channelHandlers, 0, newHandlers, 2, newHandlers.length - 2);
+        newHandlers[2] = new ActiveHandler();
+        System.arraycopy(channelHandlers, 0, newHandlers, 3, newHandlers.length - 3);
 
-        return super.connect(newHandlers);
+        ChannelFuture cf = super.connect(newHandlers);
+        return generateNewChannelFuture(cf);
+    }
+
+    private ChannelFuture generateNewChannelFuture(ChannelFuture cf) {
+        return new DefaultChannelPromise(getChannel()) {
+            {
+                connectionAttempted.addListener((obv, oldVal, newVal) -> {
+                    if (isConnectionActive()) {
+                        setSuccess();
+                    } else {
+                        if (proxyEnabled && !isProxyEstablished()) {
+                            setFailure(new ConnectException("Failed to initiate proxy"));
+                            return;
+                        }
+                        if (bounceServerProtocol) {
+                            setFailure(new ConnectException("Failed to negotiate with bounce server"));
+                        } else {
+                            setFailure(new ConnectException());
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public boolean isDone() {
+                return connectionAttempted.get() && cf.isDone();
+            }
+
+            @Override
+            public boolean isSuccess() {
+                return isConnectionActive() && cf.isSuccess();
+            }
+        };
+    }
+
+    @Override
+    public boolean isConnectionActive() {
+        return connectionStatusProperty.get();
+    }
+
+    @Override
+    public ReadOnlyBooleanProperty connectionActiveProperty() {
+        return connectionStatusProperty;
     }
 
     public ChannelFuture write(String s) {
@@ -222,28 +274,32 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
 
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+            // proxy happens before bounce server so we check that first
             if (proxyEnabled() && !proxyConnectionEstablished.get()) {
                 String estConfirm = ((ByteBuf) msg).toString(CharsetUtil.UTF_8);
                 if (checkEstablished(estConfirm)) {
-                    proxyConnectionEstablished.set(true);
                     super.channelActive(ctx);
                 }
                 proxyAttempted = true;
             } else if (bounceServerProtocol) {
                 if (!verStringRecv.get()) {
-                    String verString = ((ByteBuf) msg).toString(CharsetUtil.UTF_8);
-                    String channelBytesStr = verString.substring(0, verString.indexOf("-"));
-                    int channelBytes = Integer.parseInt(channelBytesStr);
-                    // We use ctx.writeAndFlush instead of our own write method because we don't
-                    // want the message traveling through the entire pipeline
-                    if (authenticationMessage != null) {
-                        ctx.writeAndFlush(Unpooled.copiedBuffer(authenticationMessage, CharsetUtil.UTF_8));
+                    try {
+                        String verString = ((ByteBuf) msg).toString(CharsetUtil.UTF_8);
+                        String channelBytesStr = verString.substring(0, verString.indexOf("-"));
+                        int channelBytes = Integer.parseInt(channelBytesStr);
+                        // We use ctx.writeAndFlush instead of our own write method because we don't
+                        // want the message traveling through the entire pipeline
+                        if (authenticationMessage != null) {
+                            ctx.writeAndFlush(Unpooled.copiedBuffer(authenticationMessage, CharsetUtil.UTF_8));
+                        }
+                        if (channel != -1) {
+                            ctx.writeAndFlush(Unpooled.copiedBuffer(String.format("%0" + channelBytes + "x", channel), CharsetUtil.UTF_8));
+                        }
+                        verStringRecv.set(true);
+                        super.channelActive(ctx);
+                    } finally {
+                        connectionAttempted.set(true);
                     }
-                    if (channel != -1) {
-                        ctx.writeAndFlush(Unpooled.copiedBuffer(String.format("%0" + channelBytes + "x", channel), CharsetUtil.UTF_8));
-                    }
-                    verStringRecv.set(true);
-                    super.channelActive(ctx);
                 } else {
                     super.channelRead(ctx, msg);
                 }
@@ -259,6 +315,27 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
             super.exceptionCaught(ctx, cause);
+        }
+    }
+
+    // This class simulates a handler that would be after the normal SimpleNetworkClient handler in the pipeline
+    // to detect when this channel is ready to be used
+    private class ActiveHandler extends ChannelInboundHandlerAdapter {
+        @Override
+        public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            if (proxyEnabled) {
+                proxyConnectionEstablished.set(true);
+            }
+            connectionAttempted.set(true);
+            connectionStatusProperty.set(true);
+            super.channelActive(ctx);
+        }
+
+        @Override
+        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+            connectionAttempted.set(true);
+            connectionStatusProperty.set(false);
+            super.channelInactive(ctx);
         }
     }
 
