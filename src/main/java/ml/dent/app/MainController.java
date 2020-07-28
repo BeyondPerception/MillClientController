@@ -126,6 +126,11 @@ public class MainController {
         statusHandler.setupEventLog(eventLogPopup, eventLog, closeEventLog);
         statusHandler.setLoadingGraphic(loadingGraphic);
 
+        SplitPane.setResizableWithParent(controlWindow, false);
+        window.showingProperty().addListener((obv, oldVal, newVal) -> {
+            controlWindow.setDividerPositions(.2f);
+        });
+
         // if the network client or the video client is active, allow close connection
         BooleanBinding onePlusConnectionActive = networkClient.connectionActiveProperty().not().and(videoClient.connectionActiveProperty().not());
         closeConnection.disableProperty().bind(onePlusConnectionActive);
@@ -137,6 +142,7 @@ public class MainController {
                 statusHandler.offerStatus("Network client disconnected from server", StatusHandler.INFO);
             } else {
                 pingMill();
+                networkClient.setSpeed((int) speedControl.getValue());
             }
         });
         videoClient.connectionActiveProperty().addListener((listener, oldVal, newVal) -> {
@@ -188,7 +194,7 @@ public class MainController {
 
         videoClient.startVideo(videoView);
         //debug
-        statusHandler.setVerbosity(StatusHandler.ALL);
+        statusHandler.setVerbosity(StatusHandler.INFO);
     }
 
     @FXML
@@ -269,13 +275,14 @@ public class MainController {
             videoPopout.fireEvent(new WindowEvent(videoPopout, WindowEvent.WINDOW_CLOSE_REQUEST));
         } else {
             AnchorPane root = new AnchorPane();
+            root.prefWidthProperty().bind(videoPopout.widthProperty());
+            root.prefHeightProperty().bind(videoPopout.heightProperty());
             HBox popoutContainer = new HBox();
             popoutContainer.setAlignment(Pos.CENTER);
             popoutContainer.prefWidthProperty().bind(root.widthProperty());
             popoutContainer.prefHeightProperty().bind(root.heightProperty());
             popoutContainer.getChildren().add(videoView);
             root.getChildren().add(popoutContainer);
-            setKeymapOnNode(root);
 
             bindVideoTo(popoutContainer);
 
@@ -288,8 +295,11 @@ public class MainController {
 
             imageContainer.getChildren().clear();
 
+            setKeymapOnNode(root);
+
             videoPopout.setScene(new Scene(root));
             videoPopout.show();
+            root.requestFocus();
         }
     }
 
@@ -466,11 +476,13 @@ public class MainController {
         AtomicBoolean isKeyDown = new AtomicBoolean();
 
         area.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-            if (!networkClient.isConnectionActive() || isKeyDown.get()) {
+            if (!networkClient.isConnectionActive()) {
                 return;
             }
             KeyCode kc = event.getCode();
-            if (keymap.containsKey(kc)) {
+            if (kc == KeyCode.CONTROL) {
+                speedControl.setValue(Math.min(25, Math.max(speedControl.getValue() * 2, speedControl.getValue() + 5)));
+            } else if (keymap.containsKey(kc) && !isKeyDown.get()) {
                 event.consume();
                 isKeyDown.set(true);
                 fireMouseEvent(keymap.get(kc), MouseEvent.MOUSE_PRESSED);
@@ -478,11 +490,13 @@ public class MainController {
         });
 
         area.addEventFilter(KeyEvent.KEY_RELEASED, event -> {
-            if (!networkClient.isConnectionActive() || !isKeyDown.get()) {
+            if (!networkClient.isConnectionActive()) {
                 return;
             }
             KeyCode kc = event.getCode();
-            if (keymap.containsKey(kc)) {
+            if (kc == KeyCode.CONTROL) {
+                speedControl.setValue(Math.max(1, Math.min(speedControl.getValue() / 2, speedControl.getValue() - 5)));
+            } else if (keymap.containsKey(kc) && isKeyDown.get()) {
                 event.consume();
                 fireMouseEvent(keymap.get(kc), MouseEvent.MOUSE_RELEASED);
                 isKeyDown.set(false);
