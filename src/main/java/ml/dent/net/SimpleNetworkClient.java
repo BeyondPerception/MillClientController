@@ -5,6 +5,8 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.util.CharsetUtil;
+import javafx.beans.InvalidationListener;
+import javafx.beans.Observable;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -78,23 +80,28 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
     }
 
     private ChannelFuture generateNewChannelFuture(ChannelFuture cf) {
-        return new DefaultChannelPromise(getChannel()) {
+        return new DefaultChannelPromise(cf.channel()) {
             {
-                connectionAttempted.addListener((obv, oldVal, newVal) -> {
-                    if (isConnectionActive()) {
-                        setSuccess();
-                    } else {
-                        if (proxyEnabled && !isProxyEstablished()) {
-                            setFailure(new ConnectException("Failed to initiate proxy"));
-                            return;
-                        }
-                        if (bounceServerProtocol) {
-                            setFailure(new ConnectException("Failed to negotiate with bounce server"));
+                InvalidationListener statusChanged = new InvalidationListener() {
+                    @Override
+                    public void invalidated(Observable observable) {
+                        if (isConnectionActive()) {
+                            setSuccess();
                         } else {
-                            setFailure(new ConnectException());
+                            if (proxyEnabled && !isProxyEstablished()) {
+                                setFailure(new ConnectException("Failed to initiate proxy"));
+                                return;
+                            }
+                            if (bounceServerProtocol) {
+                                setFailure(new ConnectException("Failed to negotiate with bounce server"));
+                            } else {
+                                setFailure(new ConnectException());
+                            }
                         }
+                        connectionAttempted.removeListener(this);
                     }
-                });
+                };
+                connectionAttempted.addListener(statusChanged);
             }
 
             @Override
@@ -319,15 +326,15 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
     }
 
     // This class simulates a handler that would be after the normal SimpleNetworkClient handler in the pipeline
-    // to detect when this channel is ready to be used
+// to detect when this channel is ready to be used
     private class ActiveHandler extends ChannelInboundHandlerAdapter {
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
             if (proxyEnabled) {
                 proxyConnectionEstablished.set(true);
             }
-            connectionAttempted.set(true);
             connectionStatusProperty.set(true);
+            connectionAttempted.set(true);
             super.channelActive(ctx);
         }
 
