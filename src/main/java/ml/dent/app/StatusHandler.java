@@ -45,12 +45,36 @@ public class StatusHandler {
 
     private static StatusHandler instance;
 
+    private static int verbosity;
+
+    public static final int NONE    = -1;
+    public static final int FATAL   = 1;
+    public static final int ERROR   = 2;
+    public static final int WARNING = 3;
+    public static final int INFO    = 4;
+    public static final int DEBUG   = 5;
+    public static final int MORE    = 6;
+    public static final int ALL     = Integer.MAX_VALUE;
+
+    HashMap<String, Integer> levelMap = new LinkedHashMap<String, Integer>() {
+        {
+            put("NONE", NONE);
+            put("FATAL", FATAL);
+            put("ERROR", ERROR);
+            put("WARNING", WARNING);
+            put("INFO", INFO);
+            put("DEBUG", DEBUG);
+            put("MORE", MORE);
+            put("ALL", ALL);
+        }
+    };
+
     StatusHandler(Label leftStatus, Label rightStatus, Window window) {
         if (instance != null) {
             throw new IllegalStateException("StatusHandler already instantiated, use getInstance() to get an instance");
         }
         instance = this;
-
+        verbosity = INFO;
         this.window = window;
 
         this.leftStatus = leftStatus;
@@ -65,12 +89,23 @@ public class StatusHandler {
                 setRightText(null);
             } else if (listener.wasRemoved()) {
                 if (listener.getElementRemoved().getName().equals(rightText.get())) {
-                    processes.stream().findFirst().ifPresent(n -> setRightText(n.getName()));
-                    setRightGraphic(loadingGraphic);
+                    processes.stream()
+                            .filter(n -> n.logLevel <= verbosity) // only get elements with printable log levels
+                            .findFirst() // get the "first" one
+                            .ifPresent(n -> {
+                                setRightText(n.getName());
+                                setRightGraphic(loadingGraphic);
+                            });
                 }
             } else {
-                processes.stream().findFirst().ifPresent(n -> setRightText(n.getName()));
-                setRightGraphic(loadingGraphic);
+                processes.stream()
+                        .filter(n -> n.logLevel <= verbosity) // only get elements with printable log levels
+                        .findFirst() // get the "first" one
+                        .ifPresent(n -> {
+                            setRightText(n.getName());
+                            setRightGraphic(loadingGraphic);
+
+                        });
             }
         });
 
@@ -95,6 +130,28 @@ public class StatusHandler {
         loadingGraphic = graphic;
     }
 
+    void setVerbosity(int level) {
+        verbosity = level;
+    }
+
+    int getVerbosity() {
+        return verbosity;
+    }
+
+    int getVerbosityFromString(String str) {
+        return levelMap.get(str);
+    }
+
+    String getVerbosityAsString(int verbosity) {
+        Set<Map.Entry<String, Integer>> entries = levelMap.entrySet();
+        for (Map.Entry<String, Integer> entry : entries) {
+            if (entry.getValue() == verbosity) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
     void setupEventLog(Pane container, TextArea eventLog, Button closeEventLog) {
         this.eventLog = eventLog;
         container.managedProperty().bind(container.visibleProperty());
@@ -104,30 +161,43 @@ public class StatusHandler {
     }
 
     public void offerOperation(String text, String completionText, ReadOnlyBooleanProperty isDone) {
-        offerOperation(text, new SimpleStringProperty(completionText), isDone);
+        offerOperation(text, new SimpleStringProperty(completionText), isDone, INFO);
+    }
+
+    public void offerOperation(String text, String completionText, ReadOnlyBooleanProperty isDone, int level) {
+        offerOperation(text, new SimpleStringProperty(completionText), isDone, level);
     }
 
     /**
      * Will display the value of completion text at the moment isDone is invalidated.
      * If the initial value of completion text is not changed, the initial value will be displayed.
      */
-    public void offerOperation(String text, StringProperty completionText, ReadOnlyBooleanProperty isDone) {
-        offerOperation(text, completionText, isDone, new SimpleBooleanProperty());
+    public void offerOperation(String text, StringProperty completionText, ReadOnlyBooleanProperty isDone, int level) {
+        offerOperation(text, completionText, isDone, new SimpleBooleanProperty(), level);
     }
 
     /**
      * Will display additional alert if onError is set to true the moment isDone is invalidated.
      */
-    public void offerOperation(String text, StringProperty completionText, ReadOnlyBooleanProperty isDone, ReadOnlyBooleanProperty onError) {
-        processes.add(new StatusJob(text, completionText, System.currentTimeMillis(), isDone, onError));
+    public void offerOperation(String text, StringProperty completionText, ReadOnlyBooleanProperty isDone, ReadOnlyBooleanProperty onError, int level) {
+        processes.add(new StatusJob(text, completionText, System.currentTimeMillis(), isDone, onError, level));
     }
 
-    public void offerStatus(String text) {
-        offerStatus(text, System.currentTimeMillis());
+    /**
+     * @param error      The error to be logged
+     * @param headerText The header text to be displayed to the user
+     */
+    public void offerError(String error, String headerText) {
+        offerStatus(error, ERROR);
+        UIUtil.showError("Error", error, headerText, window);
     }
 
-    private void offerStatus(String text, long time) {
-        offerStatusJob(new StatusJob(text, time));
+    public void offerStatus(String text, int level) {
+        offerStatus(text, System.currentTimeMillis(), level);
+    }
+
+    private void offerStatus(String text, long time, int level) {
+        offerStatusJob(new StatusJob(text, time, level));
         StatusJob latest = statusMessages.peekLast();
         if (latest != null) {
             currentStatus = latest;
@@ -137,8 +207,9 @@ public class StatusHandler {
 
     private void offerStatusJob(StatusJob status) {
         statusMessages.offerLast(status);
-        eventLog.appendText(status.dateFormat());
-        eventLog.appendText("\n\n");
+        if (status.logLevel <= verbosity) {
+            appendToLog(status.dateFormat() + "\n\n");
+        }
     }
 
     private void setLeftText(String val) {
@@ -160,37 +231,44 @@ public class StatusHandler {
         UIUtil.runOnJFXThread(() -> rightGraphic.set(graphic));
     }
 
+    private void appendToLog(String str) {
+        UIUtil.runOnJFXThread(() -> eventLog.appendText(str));
+    }
+
     private class StatusJob {
         private String                  name;
         private long                    timeStarted;
+        private int                     logLevel;
         private ReadOnlyBooleanProperty isDone;
         private ReadOnlyBooleanProperty onError;
         private ReadOnlyStringProperty  completionText;
 
         private InvalidationListener completionListener;
 
-        public StatusJob(String name, StringProperty completionText, long timeStarted, ReadOnlyBooleanProperty isDone, ReadOnlyBooleanProperty onError) {
+        public StatusJob(String name, StringProperty completionText, long timeStarted, ReadOnlyBooleanProperty isDone, ReadOnlyBooleanProperty onError, int logLevel) {
             this.name = name;
             this.timeStarted = timeStarted;
             this.isDone = isDone;
             this.completionText = completionText;
             this.onError = onError;
+            this.logLevel = logLevel;
 
             completionListener = listener -> operationComplete();
             isDone.addListener(completionListener);
         }
 
-        public StatusJob(String name, long timeStarted) {
+        public StatusJob(String name, long timeStarted, int logLevel) {
             this.name = name;
             this.timeStarted = timeStarted;
+            this.logLevel = logLevel;
         }
 
         private void operationComplete() {
-            offerStatus(name, timeStarted);
-            offerStatus(completionText.get());
+            offerStatus(name, timeStarted, logLevel);
+            offerStatus(completionText.get(), logLevel);
             processes.remove(this);
             if (onError.get()) {
-                UIUtil.showError("Error", completionText.get(), "Error during operation", window);
+                offerError(completionText.get(), "Error during operation");
             }
             isDone.removeListener(completionListener);
         }
@@ -202,7 +280,7 @@ public class StatusHandler {
         public String dateFormat() {
             Date cur = new Date(timeStarted);
             String formattedDate = new SimpleDateFormat("MM/dd/yyyy hh:mm a").format(cur);
-            return formattedDate + " " + name;
+            return formattedDate + " " + getVerbosityAsString(logLevel) + ": " + name;
         }
 
         @Override
