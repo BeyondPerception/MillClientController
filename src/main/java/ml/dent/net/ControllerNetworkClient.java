@@ -127,6 +127,8 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
         @Override
         public void channelInactive(ChannelHandlerContext ctx) throws Exception {
             pingFuture.cancel(true);
+            pingSent.set(false);
+            isMillAccessible.set(false);
             super.channelInactive(ctx);
         }
 
