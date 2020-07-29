@@ -119,7 +119,7 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
                     pingSent.set(true);
                 }
                 count++;
-            }, 0L, 5L, TimeUnit.SECONDS);
+            }, 0L, 3L, TimeUnit.SECONDS);
 
             super.channelActive(ctx);
         }
