@@ -1,7 +1,6 @@
 package ml.dent.app;
 
 import io.netty.channel.ChannelFuture;
-import io.netty.util.concurrent.Future;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.beans.binding.BooleanBinding;
@@ -58,22 +57,19 @@ public class MainController {
             event.consume();
             try {
                 System.out.println("Disconnecting network client");
-                Future<?> future = networkClient.disconnect();
-                future.awaitUninterruptibly();
+                networkClient.disconnect().awaitUninterruptibly();
                 System.out.println("Stopping video");
                 videoClient.stopVideo();
                 while (videoClient.isPlaying())
                     ;
                 System.out.println("Disconnecting video client");
-                future = videoClient.disconnect();
-                future.awaitUninterruptibly();
+                videoClient.disconnect().awaitUninterruptibly();
             } finally {
                 System.out.println("Exiting");
                 System.exit(0);
             }
         });
     }
-
 
     @FXML private boolean enableSSL;
     @FXML private boolean enableProxy;
@@ -106,6 +102,10 @@ public class MainController {
     @FXML private Button ZMinus;
     @FXML private Button APlus;
     @FXML private Button AMinus;
+
+    @FXML private Label helpMenu;
+
+    @FXML private Label bitrateMenu;
 
     private HashMap<KeyCode, Button> keymap;
 
@@ -189,6 +189,11 @@ public class MainController {
             }
         };
         setKeymapOnNode(controlWindow);
+
+        helpMenu.setText("Use arrow keys for X and Y axis\n" +
+                "X and Z keys for rotation\n" +
+                "Page UP/Down for Z axis\n" +
+                "Hold ctrl key for speed up");
 
         /* GUI BINDINGS */
 
