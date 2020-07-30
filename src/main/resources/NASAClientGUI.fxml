@@ -5,7 +5,6 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.image.*?>
 <?import javafx.scene.layout.*?>
-<?import javafx.scene.paint.*?>
 <?import javafx.scene.text.*?>
 
 <VBox alignment="center" prefHeight="600.0" prefWidth="900.0" xmlns="http://javafx.com/javafx/10.0.2-internal" xmlns:fx="http://javafx.com/fxml/1">
@@ -87,6 +86,7 @@
                                         </VBox>
                                     </children>
                                 </VBox>
+                        <Label fx:id="helpMenu" prefHeight="101.0" prefWidth="178.0" text="Help Menu" textAlignment="CENTER" wrapText="true" />
                                 <Button mnemonicParsing="false" onAction="#popoutVideo" text="Popout Video" />
                             </children>
                         </VBox>
@@ -127,7 +127,7 @@
                         <Insets left="5.0" />
                     </VBox.margin>
                 </HBox>
-                <TextArea fx:id="eventLog" editable="false" />
+                <TextArea fx:id="eventLog" editable="false" focusTraversable="false" />
             </children>
         </VBox>
         <HBox id="statusBar" fx:id="statusBar" alignment="CENTER_LEFT" spacing="5.0" VBox.vgrow="NEVER">
@@ -136,15 +136,12 @@
                     <font>
                         <Font size="14.0" fx:id="x3" />
                     </font>
-                    <textFill>
-                        <Color red="0.625" green="0.625" blue="0.625" fx:id="x4" />
-                    </textFill>
                     <cursor>
                         <Cursor fx:constant="HAND" />
                     </cursor>
                 </Label>
                 <Pane prefHeight="-1.0" prefWidth="-1.0" HBox.hgrow="ALWAYS" />
-                <Label fx:id="rightStatus" maxWidth="-1.0" text="Right status" textFill="$x4" HBox.hgrow="NEVER">
+                <Label fx:id="rightStatus" maxWidth="-1.0" text="Right status" HBox.hgrow="NEVER">
                     <font>
                         <Font size="14.0" />
                     </font>
