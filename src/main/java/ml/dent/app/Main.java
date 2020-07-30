@@ -14,7 +14,7 @@ public class Main extends Application {
         fxmlLoader.setController(new MainController(primaryStage));
         Parent root = fxmlLoader.load();
         primaryStage.setTitle("Mill Client Controller");
-        primaryStage.setScene(new Scene(root, 300, 275));
+        primaryStage.setScene(new Scene(root, 800, 600));
         primaryStage.show();
     }
 
