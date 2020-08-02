@@ -232,7 +232,13 @@ public class StatusHandler {
     }
 
     private void appendToLog(String str) {
-        UIUtil.runOnJFXThread(() -> eventLog.appendText(str));
+        UIUtil.runOnJFXThread(() -> {
+            double scrollTop = eventLog.getScrollTop(); // save scroll position
+            int pos = eventLog.getCaretPosition();
+            eventLog.appendText(str);
+            eventLog.setScrollTop(scrollTop); // restore position to prevent auto scrolling to new text
+            eventLog.positionCaret(pos);
+        });
     }
 
     private class StatusJob {
