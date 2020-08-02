@@ -4,7 +4,6 @@ import javafx.fxml.FXML;
 import javafx.scene.chart.LineChart;
 import javafx.scene.chart.XYChart;
 import javafx.scene.control.Label;
-import javafx.scene.layout.StackPane;
 import ml.dent.net.ControllerNetworkClient;
 import ml.dent.util.UIUtil;
 import ml.dent.video.VideoClient;
@@ -26,29 +25,64 @@ public class DiagnosticController {
     @FXML private LineChart<Number, Number> pingChart;
     @FXML private LineChart<Number, Number> bitrateChart;
 
-    private long startTime = 0;
+    private long startTime     = 0;
+    private long bitrateStartX = 0;
+
+    private XYChart.Series<Number, Number> pingSeries;
 
     @FXML
     public void initialize() {
-        startTime = System.currentTimeMillis();
-        XYChart.Series<Number, Number> pingSeries = new XYChart.Series<>();
+        pingSeries = new XYChart.Series<>();
         pingChart.getData().add(pingSeries);
 
-        networkClient.lastPingTimeProperty().addListener((obv, oldVal, newVal) -> {
-            UIUtil.runOnJFXThread(() -> {
-                lastPingLabel.setText(networkClient.lastPingTimeProperty().getValue().toString() + "ms");
-                XYChart.Data<Number, Number> dataPoint = new XYChart.Data<>(System.currentTimeMillis() - startTime, newVal);
-                StackPane valueDisplay = new StackPane();
-                Label dataValue = new Label(dataPoint.getYValue().toString());
-                valueDisplay.setOnMouseEntered(event -> {
-                    valueDisplay.getChildren().add(dataValue);
-                });
-                valueDisplay.setOnMouseExited(event -> {
-                    valueDisplay.getChildren().clear();
-                });
-                dataPoint.setNode(new StackPane());
-                pingSeries.getData().add(dataPoint);
-            });
-        });
+        networkClient.connectionActiveProperty().addListener((obv, oldVal, newVal) -> UIUtil.runOnJFXThread(() -> {
+            pingSeries = new XYChart.Series<>();
+            pingChart.getData().add(pingSeries);
+        }));
+
+        networkClient.lastPingTimeProperty().addListener((obv, oldVal, newVal) -> UIUtil.runOnJFXThread(() -> {
+            if (startTime == 0) {
+                startTime = System.currentTimeMillis();
+            }
+            lastPingLabel.setText(networkClient.lastPingTimeProperty().getValue().toString() + "ms");
+            XYChart.Data<Number, Number> dataPoint = new XYChart.Data<>((System.currentTimeMillis() - startTime) / 1000, newVal);
+//                StackPane valueDisplay = new StackPane();
+//                Label dataValue = new Label(dataPoint.getYValue().toString());
+//                valueDisplay.setOnMouseEntered(event -> {
+//                    valueDisplay.getChildren().add(dataValue);
+//                });
+//                valueDisplay.setOnMouseExited(event -> {
+//                    valueDisplay.getChildren().clear();
+//                });
+//                dataPoint.setNode(new StackPane());
+            pingSeries.getData().add(dataPoint);
+        }));
+
+        XYChart.Series<Number, Number> bitrateSeries = new XYChart.Series<>();
+        bitrateChart.getData().add(bitrateSeries);
+        videoClient.bitrateProperty().addListener((obv, oldVal, newVal) -> UIUtil.runOnJFXThread(() -> {
+            double bitrate = newVal.doubleValue() / 1000.0;
+            bitrateLabel.setText(String.format("%.2f", bitrate) + "kbit/s");
+            XYChart.Data<Number, Number> dataPoint = new XYChart.Data<>(bitrateStartX++, bitrate);
+//                StackPane valueDisplay = new StackPane();
+//                Label dataValue = new Label(dataPoint.getYValue().toString());
+//                valueDisplay.setOnMouseEntered(event -> {
+//                    valueDisplay.getChildren().add(dataValue);
+//                });
+//                valueDisplay.setOnMouseExited(event -> {
+//                    valueDisplay.getChildren().clear();
+//                });
+//                dataPoint.setNode(new StackPane());
+            bitrateSeries.getData().add(dataPoint);
+        }));
+    }
+
+    @FXML
+    protected void clearPingChart() {
+        pingChart.getData().clear();
+    }
+
+    protected void clearBitrateChart() {
+        bitrateChart.getData().clear();
     }
 }
