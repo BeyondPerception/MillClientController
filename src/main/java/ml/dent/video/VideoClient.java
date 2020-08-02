@@ -63,7 +63,8 @@ public class VideoClient extends SimpleNetworkClient {
     public void startVideo(ImageView iv) {
         BooleanProperty gstDone = new SimpleBooleanProperty(false);
         logger.offerOperation("Initializing Gstreamer", "Successfully initialized Gstreamer", gstDone);
-        Gst.init();
+        GStreamerLibrary gstLib = GStreamerLibrary.getInstance();
+        gstLib.init();
 
         while (!Gst.isInitialized())
             ;

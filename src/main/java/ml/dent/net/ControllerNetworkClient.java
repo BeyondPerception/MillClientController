@@ -3,9 +3,7 @@ package ml.dent.net;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import javafx.beans.InvalidationListener;
-import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.ReadOnlyBooleanProperty;
-import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.*;
 import ml.dent.app.StatusHandler;
 import ml.dent.util.DaemonThreadFactory;
 import ml.dent.util.Markers;
@@ -87,7 +85,12 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
         return isMillAccessible;
     }
 
-    private BooleanProperty pingSent = new SimpleBooleanProperty(false);
+    private BooleanProperty pingSent     = new SimpleBooleanProperty(false);
+    private DoubleProperty  lastPingTime = new SimpleDoubleProperty();
+
+    public ReadOnlyDoubleProperty lastPingTimeProperty() {
+        return lastPingTime;
+    }
 
     public boolean awaitNextPing(long timeout) throws InterruptedException {
         CountDownLatch wait = new CountDownLatch(1);
@@ -105,6 +108,7 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
     private class ControllerInboundHandler extends ChannelInboundHandlerAdapter {
 
         private long count;
+        private long pingSentTime;
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
@@ -115,6 +119,7 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
                 }
                 if (count % 2 == 0 || !pingSent.get() && isConnectionActive()) {
                     count = 0;
+                    pingSentTime = System.currentTimeMillis();
                     writeAndFlush(Markers.PING_REQUEST);
                     pingSent.set(true);
                 }
@@ -145,6 +150,7 @@ public class ControllerNetworkClient extends SimpleNetworkClient {
                 } else if (b == Markers.PING_RESPONSE) {
                     logger.offerStatus("Recv ping response", StatusHandler.MORE);
                     if (pingSent.get()) {
+                        lastPingTime.set(System.currentTimeMillis() - pingSentTime);
                         pingSent.set(false);
                     }
                     isMillAccessible.set(true);

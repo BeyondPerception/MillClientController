@@ -14,6 +14,7 @@
                 <Menu mnemonicParsing="false" text="File">
                     <items>
                         <MenuItem mnemonicParsing="false" onAction="#openSettingsWindow" text="Settings…" />
+                  <MenuItem mnemonicParsing="false" onAction="#openDiagnosticWindow" text="Diagnostics" />
                     </items>
                 </Menu>
                 <Menu mnemonicParsing="false" text="Connect">

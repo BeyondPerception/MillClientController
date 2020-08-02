@@ -36,6 +36,9 @@ import ml.dent.video.VideoClient;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -104,8 +107,6 @@ public class MainController {
     @FXML private Button AMinus;
 
     @FXML private Label helpMenu;
-
-    @FXML private Label bitrateMenu;
 
     private HashMap<KeyCode, Button> keymap;
 
@@ -195,10 +196,17 @@ public class MainController {
                 "Page UP/Down for Z axis\n" +
                 "Hold ctrl key for speed up");
 
+        ScheduledExecutorService bitrateTimer = new ScheduledThreadPoolExecutor(1);
+        bitrateTimer.scheduleAtFixedRate(() -> {
+
+        }, 0, 1, TimeUnit.SECONDS);
+
+
+
         /* GUI BINDINGS */
 
         videoClient.startVideo(videoView);
-        //debug
+
         statusHandler.setVerbosity(StatusHandler.INFO);
     }
 
@@ -348,7 +356,26 @@ public class MainController {
         settingsWindow.setScene(new Scene(root));
         settingsWindow.initOwner(window);
         settingsController.switchToNetworkSettingsView();
-        settingsWindow.show();
+        settingsWindow.showAndWait();
+    }
+
+    Stage diagnosticsWindow;
+
+    @FXML
+    protected void openDiagnosticWindow() throws IOException {
+        if (diagnosticsWindow == null) {
+            diagnosticsWindow = new Stage();
+        } else if (diagnosticsWindow.isShowing()) {
+            return;
+        }
+        DiagnosticController diagnosticController = new DiagnosticController(networkClient, videoClient);
+        FXMLLoader diagnosticLoader = new FXMLLoader(getClass().getResource("/DiagnosticWindow.fxml"));
+        diagnosticLoader.setController(diagnosticController);
+        Parent root = diagnosticLoader.load();
+        diagnosticsWindow.setTitle("Diagnostics");
+        diagnosticsWindow.setScene(new Scene(root));
+        diagnosticsWindow.initOwner(window);
+        diagnosticsWindow.show();
     }
 
     private void connectClient(SimpleNetworkClient client) {
