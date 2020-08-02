@@ -5,14 +5,12 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.ReadOnlyBooleanProperty;
-import javafx.beans.property.ReadOnlyObjectProperty;
-import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import ml.dent.app.StatusHandler;
 import ml.dent.net.SimpleNetworkClient;
+import ml.dent.util.DaemonThreadFactory;
 import org.freedesktop.gstreamer.Buffer;
 import org.freedesktop.gstreamer.Bus;
 import org.freedesktop.gstreamer.Gst;
@@ -22,6 +20,9 @@ import org.freedesktop.gstreamer.elements.AppSrc;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class VideoClient extends SimpleNetworkClient {
 
@@ -60,6 +61,10 @@ public class VideoClient extends SimpleNetworkClient {
         return pipeline.isPlaying();
     }
 
+    private FXImageSink imageSink;
+
+    private ScheduledExecutorService videoMonitor = new ScheduledThreadPoolExecutor(1, new DaemonThreadFactory());
+
     public void startVideo(ImageView iv) {
         BooleanProperty gstDone = new SimpleBooleanProperty(false);
         logger.offerOperation("Initializing Gstreamer", "Successfully initialized Gstreamer", gstDone);
@@ -96,7 +101,7 @@ public class VideoClient extends SimpleNetworkClient {
         AppSink sink = (AppSink) pipeline.getElementByName("sink");
         sink.set("max-buffers", 5000);
         sink.set("drop", true);
-        FXImageSink imageSink = new FXImageSink(sink);
+        imageSink = new FXImageSink(sink);
         ReadOnlyObjectProperty<Image> prop = imageSink.imageProperty();
         iv.imageProperty().bind(prop);
 
@@ -116,8 +121,25 @@ public class VideoClient extends SimpleNetworkClient {
 //			System.out.println("Bus Message : " + message.getStructure());
 //		});
 
+        videoMonitor.scheduleAtFixedRate(() -> {
+            bitrate.set((byteCount - lastByteCount) * 8);
+            lastByteCount = byteCount;
+        }, 1, 1, TimeUnit.SECONDS);
+
         logger.offerStatus("Ready to play video", StatusHandler.INFO);
         pipeline.play();
+    }
+
+    private LongProperty bitrate = new SimpleLongProperty();
+
+    private long lastByteCount = 0;
+    private long byteCount     = 0;
+
+    /**
+     * @return the bitrate in bits/second
+     */
+    public ReadOnlyLongProperty bitrateProperty() {
+        return bitrate;
     }
 
     public void stopVideo() {
@@ -135,6 +157,7 @@ public class VideoClient extends SimpleNetworkClient {
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
             ByteBuf buf = (ByteBuf) msg;
             while (buf.readableBytes() > 0) {
+                byteCount++;
                 incomingBytes.offer(buf.readByte());
             }
 
