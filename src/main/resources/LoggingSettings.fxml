@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.*?>
+
+<AnchorPane fx:id="currentView" prefHeight="444.0" prefWidth="433.0" xmlns="http://javafx.com/javafx/10.0.2-internal" xmlns:fx="http://javafx.com/fxml/1">
+    <children>
+      <VBox prefHeight="444.0" prefWidth="433.0" spacing="20.0" AnchorPane.bottomAnchor="10.0" AnchorPane.leftAnchor="10.0" AnchorPane.rightAnchor="10.0" AnchorPane.topAnchor="10.0">
+         <children>
+                <HBox alignment="CENTER_LEFT">
+                    <children>
+                        <Label text="Log Level:">
+                            <HBox.margin>
+                                <Insets right="5.0" />
+                            </HBox.margin>
+                        </Label>
+                  <ChoiceBox fx:id="logLevelPicker" prefWidth="150.0" />
+                    </children>
+                </HBox>
+         </children>
+      </VBox>
+      <HBox alignment="CENTER" spacing="10.0" AnchorPane.bottomAnchor="10.0" AnchorPane.rightAnchor="10.0">
+         <children>
+            <Button mnemonicParsing="false" onAction="#saveAndClose" text="Ok" />
+            <Button mnemonicParsing="false" onAction="#closeSettingsWindow" text="Cancel" />
+            <Button mnemonicParsing="false" onAction="#saveSettings" text="Apply" />
+         </children>
+      </HBox>
+        <Label fx:id="currentViewName" layoutX="406.0" layoutY="238.0" opacity="0.0" text="logging" visible="false">
+         <font>
+            <Font size="1.0" />
+         </font></Label>
+    </children>
+</AnchorPane>
