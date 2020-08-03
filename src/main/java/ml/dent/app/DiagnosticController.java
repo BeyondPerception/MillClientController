@@ -25,17 +25,17 @@ public class DiagnosticController {
     @FXML private LineChart<Number, Number> pingChart;
     @FXML private LineChart<Number, Number> bitrateChart;
 
-    private long startTime     = 0;
-    private long bitrateStartX = 0;
+    private long startTime = 0;
 
     private XYChart.Series<Number, Number> pingSeries;
+    private XYChart.Series<Number, Number> bitrateSeries;
 
     @FXML
     public void initialize() {
         pingSeries = new XYChart.Series<>();
         pingChart.getData().add(pingSeries);
 
-        networkClient.connectionActiveProperty().addListener((obv, oldVal, newVal) -> UIUtil.runOnJFXThread(() -> {
+        networkClient.millAccessProperty().addListener((obv, oldVal, newVal) -> UIUtil.runOnJFXThread(() -> {
             pingSeries = new XYChart.Series<>();
             pingChart.getData().add(pingSeries);
         }));
@@ -58,12 +58,12 @@ public class DiagnosticController {
             pingSeries.getData().add(dataPoint);
         }));
 
-        XYChart.Series<Number, Number> bitrateSeries = new XYChart.Series<>();
+        bitrateSeries = new XYChart.Series<>();
         bitrateChart.getData().add(bitrateSeries);
         videoClient.bitrateProperty().addListener((obv, oldVal, newVal) -> UIUtil.runOnJFXThread(() -> {
             double bitrate = newVal.doubleValue() / 1000.0;
             bitrateLabel.setText(String.format("%.2f", bitrate) + "kbit/s");
-            XYChart.Data<Number, Number> dataPoint = new XYChart.Data<>(bitrateStartX++, bitrate);
+            XYChart.Data<Number, Number> dataPoint = new XYChart.Data<>((System.currentTimeMillis() - startTime) / 1000, bitrate);
 //                StackPane valueDisplay = new StackPane();
 //                Label dataValue = new Label(dataPoint.getYValue().toString());
 //                valueDisplay.setOnMouseEntered(event -> {
@@ -80,9 +80,14 @@ public class DiagnosticController {
     @FXML
     protected void clearPingChart() {
         pingChart.getData().clear();
+        pingSeries = new XYChart.Series<>();
+        pingChart.getData().add(pingSeries);
     }
 
+    @FXML
     protected void clearBitrateChart() {
         bitrateChart.getData().clear();
+        bitrateSeries = new XYChart.Series<>();
+        bitrateChart.getData().add(bitrateSeries);
     }
 }
