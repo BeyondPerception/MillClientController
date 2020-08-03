@@ -359,15 +359,10 @@ public class MainController {
         settingsWindow.showAndWait();
     }
 
-    Stage diagnosticsWindow;
 
     @FXML
     protected void openDiagnosticWindow() throws IOException {
-        if (diagnosticsWindow == null) {
-            diagnosticsWindow = new Stage();
-        } else if (diagnosticsWindow.isShowing()) {
-            return;
-        }
+        Stage diagnosticsWindow = new Stage();
         DiagnosticController diagnosticController = new DiagnosticController(networkClient, videoClient);
         FXMLLoader diagnosticLoader = new FXMLLoader(getClass().getResource("/DiagnosticWindow.fxml"));
         diagnosticLoader.setController(diagnosticController);
