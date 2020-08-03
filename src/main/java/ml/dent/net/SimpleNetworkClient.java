@@ -5,6 +5,7 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.util.CharsetUtil;
+import io.netty.util.ReferenceCountUtil;
 import javafx.beans.InvalidationListener;
 import javafx.beans.Observable;
 import javafx.beans.property.BooleanProperty;
@@ -38,7 +39,8 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
      * @param port    The server's port to connect to
      * @param channel provides the channel that this client can send and receive
      *                messages on, this client will only send and receive messages
-     *                on this channel
+     *                on this channel. This will only be used if bounceserver protocol is enabled,
+     *                and channel does not equal -1
      */
     public SimpleNetworkClient(String host, int port, int channel) {
         this(host, port, channel, false);
@@ -63,17 +65,19 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
 
     @Override
     public ChannelFuture connect() {
-        return connect(new ClientOutboundHandler(), new ClientInboundHandler(), new ActiveHandler());
+        return connect(new ChannelHandler[0]);
     }
 
     @Override
     public ChannelFuture connect(ChannelHandler... channelHandlers) {
         connectionAttempted.set(false);
-        ChannelHandler[] newHandlers = new ChannelHandler[channelHandlers.length + 3];
+        ChannelHandler[] newHandlers = new ChannelHandler[channelHandlers.length + 4];
         newHandlers[0] = new ClientOutboundHandler();
-        newHandlers[1] = new ClientInboundHandler();
-        newHandlers[2] = new ActiveHandler();
-        System.arraycopy(channelHandlers, 0, newHandlers, 3, newHandlers.length - 3);
+//        newHandlers[1] = new ClientInboundHandler();
+        newHandlers[1] = new ProxyHandler();
+        newHandlers[2] = new BounceServerHandler();
+        newHandlers[3] = new ActiveHandler();
+        System.arraycopy(channelHandlers, 0, newHandlers, 4, newHandlers.length - 4);
 
         ChannelFuture cf = super.connect(newHandlers);
         return generateNewChannelFuture(cf);
@@ -213,6 +217,7 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
      * Will return true if the proxy is not enabled, otherwise will return if the
      * proxy has been attempted
      */
+    @Deprecated
     public boolean proxyConnectionAttempted() {
         if (!proxyEnabled()) {
             return true;
@@ -221,6 +226,7 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
         return proxyAttempted;
     }
 
+    @Deprecated
     public boolean isProxyEstablished() {
         return proxyConnectionEstablished.get();
     }
@@ -243,11 +249,11 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
      * @return Whether the connection is not only active, but established and ready
      * to use to the knowledge of this class
      */
+    @Deprecated
     public boolean isConnectionReady() {
         if (!isConnectionActive()) {
             return false;
         }
-
         return !proxyEnabled() || isProxyEstablished();
     }
 
@@ -263,52 +269,51 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
         name = newName;
     }
 
-    private class ClientInboundHandler extends ChannelInboundHandlerAdapter {
-
+    private class ProxyHandler extends ChannelInboundHandlerAdapter {
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            if (proxyEnabled) {
-                String httpReq = "CONNECT localhost:" + getInternalPort() + " HTTP/1.1\r\n" + "Host: localhost:1111\r\n"
+            if (proxyEnabled()) {
+                String httpReq = "CONNECT localhost:" + getInternalPort() + " HTTP/1.1\r\n" + "Host: localhost:" + getInternalPort() + "\r\n"
                         + "Proxy-Connection: Keep-Alive\r\n" + "\r\n";
 
                 ctx.writeAndFlush(Unpooled.copiedBuffer(httpReq, CharsetUtil.UTF_8));
-            } else if (!bounceServerProtocol) {
-                super.channelActive(ctx);
             }
+            super.channelActive(ctx);
         }
-
-        private AtomicBoolean verStringRecv = new AtomicBoolean(false);
 
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-            // proxy happens before bounce server so we check that first
             if (proxyEnabled() && !proxyConnectionEstablished.get()) {
-                String estConfirm = ((ByteBuf) msg).toString(CharsetUtil.UTF_8);
-                if (checkEstablished(estConfirm)) {
-                    super.channelActive(ctx);
-                }
-                proxyAttempted = true;
-            } else if (bounceServerProtocol) {
-                if (!verStringRecv.get()) {
-                    try {
-                        String verString = ((ByteBuf) msg).toString(CharsetUtil.UTF_8);
-                        String channelBytesStr = verString.substring(0, verString.indexOf("-"));
-                        int channelBytes = Integer.parseInt(channelBytesStr);
-                        // We use ctx.writeAndFlush instead of our own write method because we don't
-                        // want the message traveling through the entire pipeline
-                        if (authenticationMessage != null) {
-                            ctx.writeAndFlush(Unpooled.copiedBuffer(authenticationMessage, CharsetUtil.UTF_8));
+                try {
+                    ByteBuf buf = (ByteBuf) msg;
+                    StringBuilder httpResponse = new StringBuilder();
+                    int endCount = 0;
+                    byte lastByte = -1;
+                    // HTTP Responses always end in a pair of \r\n's, so we keep reading until we hit that pattern
+                    while (endCount < 2) {
+                        byte b = buf.readByte();
+                        if (b == '\n' && lastByte == '\r') {
+                            endCount++;
                         }
-                        if (channel != -1) {
-                            ctx.writeAndFlush(Unpooled.copiedBuffer(String.format("%0" + channelBytes + "x", channel), CharsetUtil.UTF_8));
+                        if (b != '\n' && b != '\r') {
+                            endCount = 0;
                         }
-                        verStringRecv.set(true);
-                        super.channelActive(ctx);
-                    } finally {
-                        connectionAttempted.set(true);
+                        httpResponse.append((char) b);
+                        lastByte = b;
                     }
-                } else {
-                    super.channelRead(ctx, msg);
+                    if (checkEstablished(httpResponse.toString())) {
+                        proxyConnectionEstablished.set(true);
+                        super.channelActive(ctx);
+                        if (buf.readableBytes() > 0) {
+                            // Forward the rest of the message down the pipeline
+                            ByteBuf nextBuf = Unpooled.buffer(buf.readableBytes());
+                            buf.readBytes(nextBuf);
+                            super.channelRead(ctx, nextBuf);
+                        }
+                    }
+                    proxyAttempted = true;
+                } finally {
+                    ReferenceCountUtil.release(msg);
                 }
             } else {
                 super.channelRead(ctx, msg);
@@ -318,21 +323,48 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
         private boolean checkEstablished(String confirm) {
             return confirm.contains("Established");
         }
+    }
+
+    private class BounceServerHandler extends ChannelInboundHandlerAdapter {
+
+        private AtomicBoolean verStringRecv = new AtomicBoolean();
 
         @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            super.exceptionCaught(ctx, cause);
+        public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            verStringRecv.set(false);
+            if (!bounceServerProtocol) {
+                // If not adhering to bounce server protocol, forward down the pipeline. Otherwise, wait.
+                super.channelActive(ctx);
+            }
+        }
+
+        @Override
+        public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+            if (bounceServerProtocol && !verStringRecv.get()) {
+                String verString = ((ByteBuf) msg).toString(CharsetUtil.UTF_8);
+                String channelBytesStr = verString.substring(0, verString.indexOf("-"));
+                int channelBytes = Integer.parseInt(channelBytesStr);
+                // We use ctx.writeAndFlush instead of our own write method because we don't
+                // want the message traveling through the entire pipeline
+                if (authenticationMessage != null) {
+                    ctx.writeAndFlush(Unpooled.copiedBuffer(authenticationMessage, CharsetUtil.UTF_8));
+                }
+                if (channel != -1) {
+                    ctx.writeAndFlush(Unpooled.copiedBuffer(String.format("%0" + channelBytes + "x", channel), CharsetUtil.UTF_8));
+                }
+                verStringRecv.set(true);
+                super.channelActive(ctx);
+            } else {
+                super.channelRead(ctx, msg);
+            }
         }
     }
 
     // This class simulates a handler that would be after the normal SimpleNetworkClient handler in the pipeline
-// to detect when this channel is ready to be used
+    // to detect when this channel is ready to be used
     private class ActiveHandler extends ChannelInboundHandlerAdapter {
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            if (proxyEnabled) {
-                proxyConnectionEstablished.set(true);
-            }
             connectionStatusProperty.set(true);
             connectionAttempted.set(true);
             super.channelActive(ctx);
@@ -341,8 +373,10 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
         @Override
         public void channelInactive(ChannelHandlerContext ctx) throws Exception {
             connectionAttempted.set(true);
-            connectionStatusProperty.set(false);
-            super.channelInactive(ctx);
+            if (connectionStatusProperty.get()) {
+                connectionStatusProperty.set(false);
+                super.channelInactive(ctx);
+            }
         }
     }
 
