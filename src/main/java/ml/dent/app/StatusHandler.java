@@ -5,6 +5,7 @@ import javafx.beans.property.*;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableSet;
 import javafx.collections.SetChangeListener;
+import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContentDisplay;
@@ -20,6 +21,7 @@ import java.util.*;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class StatusHandler {
 
@@ -241,6 +243,8 @@ public class StatusHandler {
         });
     }
 
+    private static AtomicInteger operationInProgress = new AtomicInteger(0);
+
     private class StatusJob {
         private String                  name;
         private long                    timeStarted;
@@ -258,6 +262,11 @@ public class StatusHandler {
             this.completionText = completionText;
             this.onError = onError;
             this.logLevel = logLevel;
+
+            UIUtil.runOnJFXThread(() -> {
+                operationInProgress.getAndIncrement();
+                window.getScene().setCursor(Cursor.WAIT);
+            });
 
             completionListener = listener -> operationComplete();
             isDone.addListener(completionListener);
@@ -277,6 +286,10 @@ public class StatusHandler {
                 offerError(completionText.get(), "Error during operation");
             }
             isDone.removeListener(completionListener);
+            operationInProgress.getAndDecrement();
+            if (operationInProgress.get() <= 0) {
+                window.getScene().setCursor(Cursor.DEFAULT);
+            }
         }
 
         public String getName() {
