@@ -265,7 +265,9 @@ public class StatusHandler {
 
             UIUtil.runOnJFXThread(() -> {
                 operationInProgress.getAndIncrement();
-                window.getScene().setCursor(Cursor.WAIT);
+                if (window.getScene() != null) {
+                    window.getScene().setCursor(Cursor.WAIT);
+                }
             });
 
             completionListener = listener -> operationComplete();
@@ -287,7 +289,7 @@ public class StatusHandler {
             }
             isDone.removeListener(completionListener);
             operationInProgress.getAndDecrement();
-            if (operationInProgress.get() <= 0) {
+            if (operationInProgress.get() <= 0 && window.getScene() != null) {
                 window.getScene().setCursor(Cursor.DEFAULT);
             }
         }
