@@ -77,6 +77,7 @@ public class MainController {
     @FXML private boolean enableSSL;
     @FXML private boolean enableProxy;
 
+    @FXML private MenuItem startConnection;
     @FXML private MenuItem closeConnection;
 
     @FXML private SplitPane controlWindow;
@@ -135,6 +136,7 @@ public class MainController {
         // if the network client or the video client is active, allow close connection
         BooleanBinding onePlusConnectionActive = networkClient.connectionActiveProperty().not().and(videoClient.connectionActiveProperty().not());
         closeConnection.disableProperty().bind(onePlusConnectionActive);
+        startConnection.disableProperty().bind(onePlusConnectionActive.not());
         networkClient.connectionActiveProperty().addListener((listener, oldVal, newVal) -> {
             if (!networkClient.isConnectionActive()) {
                 if (networkClient.isUnexpectedClose()) {
