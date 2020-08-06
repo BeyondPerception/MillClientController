@@ -61,6 +61,9 @@ public class DiagnosticController {
         bitrateSeries = new XYChart.Series<>();
         bitrateChart.getData().add(bitrateSeries);
         videoClient.bitrateProperty().addListener((obv, oldVal, newVal) -> UIUtil.runOnJFXThread(() -> {
+            if (startTime == 0) {
+                startTime = System.currentTimeMillis();
+            }
             double bitrate = newVal.doubleValue() / 1000.0;
             bitrateLabel.setText(String.format("%.0f", bitrate) + "kbit/s");
             XYChart.Data<Number, Number> dataPoint = new XYChart.Data<>((System.currentTimeMillis() - startTime) / 1000, bitrate);
