@@ -87,6 +87,7 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
         System.arraycopy(channelHandlers, 0, newHandlers, handlerList.size(), channelHandlers.length);
 
         ChannelFuture cf = super.connect(newHandlers);
+        cf.awaitUninterruptibly();
         generateNewChannelFuture(cf);
         return channelPromise;
     }
@@ -238,6 +239,7 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
     private class ProxyHandler extends ChannelInboundHandlerAdapter {
         @Override
         public void channelActive(ChannelHandlerContext ctx) {
+            proxyConnectionEstablished.set(false);
             String httpReq = "CONNECT localhost:" + getInternalPort() + " HTTP/1.1\r\n" + "Host: localhost:" + getInternalPort() + "\r\n"
                     + "Proxy-Connection: Keep-Alive\r\n" + "\r\n";
 
