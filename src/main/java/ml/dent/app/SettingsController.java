@@ -84,6 +84,7 @@ public class SettingsController {
             portInput.setText(Integer.toString(networkClient.getPort()));
             enableSSL.setSelected(networkClient.sslEnabled());
             enableProxy.setSelected(networkClient.proxyEnabled());
+            internalPortInput.setText(Integer.toString(networkClient.getInternalPort()));
             internalPortInput.disableProperty().bind(enableProxy.selectedProperty().not());
             splitPane.getItems().set(1, view);
         } catch (IOException e) {
@@ -167,6 +168,6 @@ public class SettingsController {
             videoClient.setInternalPort(newInternalPort);
         }
         networkClient.enableProxy(value);
-        networkClient.enableProxy(value);
+        videoClient.enableProxy(value);
     }
 }
