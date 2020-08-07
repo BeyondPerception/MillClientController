@@ -14,7 +14,7 @@
         <HBox spacing="5.0">
             <children>
                 <Label text="Last Ping:"/>
-                <Label fx:id="lastPingLabel" text="10ms"/>
+                <Label fx:id="lastPingLabel" text="-ms"/>
                 <Pane HBox.hgrow="ALWAYS"/>
                 <Button mnemonicParsing="false" onAction="#clearPingChart" text="Clear">
                     <font>
@@ -34,7 +34,7 @@
         <HBox spacing="5.0">
             <children>
                 <Label text="Bitrate:"/>
-                <Label fx:id="bitrateLabel" text="10bytes/second"/>
+                <Label fx:id="bitrateLabel" text="-kbit/s"/>
                 <Pane HBox.hgrow="ALWAYS"/>
                 <Button mnemonicParsing="false" onAction="#clearBitrateChart" text="Clear">
                     <font>

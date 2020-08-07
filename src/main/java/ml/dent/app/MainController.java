@@ -129,14 +129,11 @@ public class MainController {
         statusHandler.setLoadingGraphic(loadingGraphic);
 
         SplitPane.setResizableWithParent(controlWindow, false);
-        window.showingProperty().addListener((obv, oldVal, newVal) -> {
-            controlWindow.setDividerPositions(.2f);
-        });
+        window.showingProperty().addListener((obv, oldVal, newVal) -> controlWindow.setDividerPositions(.2f));
 
         // if the network client or the video client is active, allow close connection
         BooleanBinding onePlusConnectionActive = networkClient.connectionActiveProperty().not().and(videoClient.connectionActiveProperty().not());
         closeConnection.disableProperty().bind(onePlusConnectionActive);
-        startConnection.disableProperty().bind(onePlusConnectionActive.not());
         networkClient.connectionActiveProperty().addListener((listener, oldVal, newVal) -> {
             if (!networkClient.isConnectionActive()) {
                 if (networkClient.isUnexpectedClose()) {
@@ -389,12 +386,11 @@ public class MainController {
             cf.awaitUninterruptibly();
             if (cf.isSuccess()) {
                 completionText.set(client.getName() + " successfully connected to the server");
-                isDone.set(true);
             } else {
                 completionText.set(client.getName() + " failed to connect to the server");
                 onError.set(true);
-                isDone.set(true);
             }
+            isDone.set(true);
         }).start();
     }
 

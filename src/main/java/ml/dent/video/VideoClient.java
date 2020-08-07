@@ -61,8 +61,6 @@ public class VideoClient extends SimpleNetworkClient {
         return pipeline.isPlaying();
     }
 
-    private FXImageSink imageSink;
-
     private ScheduledExecutorService videoMonitor = new ScheduledThreadPoolExecutor(1, new DaemonThreadFactory());
 
     public void startVideo(ImageView iv) {
@@ -101,7 +99,7 @@ public class VideoClient extends SimpleNetworkClient {
         AppSink sink = (AppSink) pipeline.getElementByName("sink");
         sink.set("max-buffers", 5000);
         sink.set("drop", true);
-        imageSink = new FXImageSink(sink);
+        FXImageSink imageSink = new FXImageSink(sink);
         ReadOnlyObjectProperty<Image> prop = imageSink.imageProperty();
         iv.imageProperty().bind(prop);
 
