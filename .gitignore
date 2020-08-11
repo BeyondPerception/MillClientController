@@ -3,3 +3,4 @@ target/
 NASAClientGUI.iml
 out/
 src/test/
+.run/
