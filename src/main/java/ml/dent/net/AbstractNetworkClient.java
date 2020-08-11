@@ -239,6 +239,10 @@ public abstract class AbstractNetworkClient {
         return channel;
     }
 
+    protected void setCloseReason(String reason) {
+        closeReason = reason;
+    }
+
     private class InboundHandler extends ChannelInboundHandlerAdapter {
 
         @Override
