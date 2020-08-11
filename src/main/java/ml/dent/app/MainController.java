@@ -36,9 +36,6 @@ import ml.dent.video.VideoClient;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -116,10 +113,17 @@ public class MainController {
         // Status Handler needs to be initialized before video and network client
         statusHandler = new StatusHandler(leftStatus, rightStatus, window);
 
-        networkClient = new ControllerNetworkClient("bounceserver.tk", 1111);
-        videoClient = new VideoClient("bounceserver.tk", 1111);
+        networkClient = new ControllerNetworkClient("bounceserver.tk", 443);
+        videoClient = new VideoClient("bounceserver.tk", 443);
         networkClient.setName("Network Client");
         videoClient.setName("Video Client");
+
+        networkClient.enableProxy(true);
+        networkClient.setInternalPort(1111);
+        networkClient.enableSSL(true);
+        videoClient.enableProxy(true);
+        videoClient.setInternalPort(1111);
+        videoClient.enableSSL(true);
 
         /* GUI BINDINGS */
         ProgressIndicator loadingGraphic = new ProgressIndicator();
@@ -194,13 +198,6 @@ public class MainController {
                 "X and Z keys for rotation\n" +
                 "Page UP/Down for Z axis\n" +
                 "Hold ctrl key for speed up");
-
-        ScheduledExecutorService bitrateTimer = new ScheduledThreadPoolExecutor(1);
-        bitrateTimer.scheduleAtFixedRate(() -> {
-
-        }, 0, 1, TimeUnit.SECONDS);
-
-
 
         /* GUI BINDINGS */
 
