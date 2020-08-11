@@ -309,10 +309,12 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
     private class BounceServerHandler extends ChannelInboundHandlerAdapter {
 
         private AtomicBoolean verStringRecv = new AtomicBoolean();
+        private AtomicBoolean statusRecv    = new AtomicBoolean();
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) {
             verStringRecv.set(false);
+            statusRecv.set(false);
         }
 
         @Override
@@ -336,7 +338,19 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
                         ctx.writeAndFlush(Unpooled.copiedBuffer(String.format("%0" + channelBytes + "x", channel), CharsetUtil.UTF_8));
                     }
                     verStringRecv.set(true);
-                    super.channelActive(ctx);
+                } finally {
+                    ReferenceCountUtil.release(msg);
+                }
+            } else if (!statusRecv.get()) {
+                try {
+                    String statusString = ((ByteBuf) msg).toString(CharsetUtil.UTF_8).trim();
+                    statusRecv.set(true);
+                    if (statusString.equals("READY")) {
+                        super.channelActive(ctx);
+                    } else {
+                        channelPromise.setFailure(new ProtocolException(statusString));
+                        ctx.close();
+                    }
                 } finally {
                     ReferenceCountUtil.release(msg);
                 }
