@@ -87,7 +87,6 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
         System.arraycopy(channelHandlers, 0, newHandlers, handlerList.size(), channelHandlers.length);
 
         ChannelFuture cf = super.connect(newHandlers);
-        cf.awaitUninterruptibly();
         generateNewChannelFuture(cf);
         return channelPromise;
     }
@@ -144,13 +143,18 @@ public class SimpleNetworkClient extends AbstractNetworkClient {
     private PooledByteBufAllocator alloc = new PooledByteBufAllocator();
     private ByteBuf                curBuffer;
 
+    /**
+     * If buffering is enabled, this method will flush for you if the buffer is filled.
+     *
+     * @param b The byte to write
+     */
     public void write(byte b) {
         if (buffering) {
             if (curBuffer == null) {
                 curBuffer = alloc.buffer(BUFFER_SIZE, BUFFER_SIZE);
             }
             if (curBuffer.writableBytes() <= 0) {
-                write(curBuffer);
+                writeAndFlush(curBuffer);
                 curBuffer = alloc.buffer(BUFFER_SIZE, BUFFER_SIZE);
             }
             curBuffer.writeByte(b);
