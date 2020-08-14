@@ -103,7 +103,7 @@ public abstract class AbstractNetworkClient {
                 }
                 socketChannel.pipeline().addLast(new InboundHandler()).addLast(channelHandlers);
             }
-        }).option(ChannelOption.TCP_NODELAY, true);
+        }).option(ChannelOption.TCP_NODELAY, true).option(ChannelOption.SO_KEEPALIVE, true);
 
         connectionFuture = bootstrap.connect();
         connectionFuture.addListener(future -> {
